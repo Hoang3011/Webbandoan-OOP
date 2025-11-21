@@ -1,0 +1,23 @@
+# Bỏ qua thư mục database nếu có
+database/
+
+# Bỏ qua file chứa thông tin đăng nhập database
+.env
+config.php
+
+# Bỏ qua các file của XAMPP (nếu có)
+*.sql
+
+# Nhưng vẫn cho phép file trong thư mục database/
+!database/
+!database/*.sql
+
+# Bỏ qua thư mục vendor (nếu dùng Composer)
+vendor/
+
+# Bỏ qua thư mục node_modules (nếu dùng Node.js)
+node_modules/
+
+# Bỏ qua các file hệ thống của MacOS và Windows
+.DS_Store
+Thumbs.db
