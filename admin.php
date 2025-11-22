@@ -69,9 +69,7 @@ $thongKe = new ThongKe($conn);
 // 1. Tổng số khách hàng
 $total_khachhang = $thongKe->soLuongKhachHang();
 // 2. Tổng số sản phẩm (thêm phương thức mới vào ThongKe nếu cần, ở đây giả sử thêm)
-$sql_sanpham = "SELECT COUNT(*) as total_sp FROM sanpham";
-$stmt_sp = $conn->query($sql_sanpham);
-$total_sanpham = $stmt_sp->fetch_assoc()['total_sp'];
+$total_sanpham = $thongKe->soLuongSanPham();
 // 3. Tổng doanh thu
 $total_doanhthu = $thongKe->tongDoanhThu();
 $total_doanhthu_formatted = number_format($total_doanhthu, 0, ',', '.') . "₫";

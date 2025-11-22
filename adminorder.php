@@ -17,27 +17,69 @@
     <link href="./assets/img/logo.png" rel="icon" type="image/x-icon" />
   </head>
   <body>
-    <?php
-    include_once "./includes/headeradmin.php";
-    ?>
+
+<?php
+ob_start();                       // Bắt đầu buffer để tránh lỗi header
+session_start();
+
+// Kiểm tra đăng nhập trước khi xuất bất kỳ HTML nào
+if (!isset($_SESSION['username'])) {
+    header("Location: adminlogin.php");
+    exit();
+}
+
+include_once "./includes/headeradmin.php";
+include_once "connect.php";
+
+require_once "model/DonHang.php";   // Class DonHang của bạn
+
+// ──────────────────────────────────────
+// PHÂN TRANG
+// ──────────────────────────────────────
+$limit = 10;
+$page  = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($page < 1) $page = 1;
+$start = ($page - 1) * $limit;
+
+// Tổng số đơn hàng
+$total_query  = "SELECT COUNT(*) AS total FROM donhang";
+$total_result = mysqli_query($conn, $total_query);
+$total_row    = mysqli_fetch_assoc($total_result);
+$total_orders = $total_row['total'];
+$total_pages  = ceil($total_orders / $limit);
+
+// Lấy danh sách đơn hàng + tên khách hàng
+$sql = "SELECT dh.*, kh.TEN_KH 
+        FROM donhang dh 
+        JOIN khachhang kh ON dh.MA_KH = kh.MA_KH 
+        ORDER BY dh.NGAY_TAO DESC 
+        LIMIT $start, $limit";
+
+$result = mysqli_query($conn, $sql);
+$orders = [];
+
+while ($row = mysqli_fetch_assoc($result)) {
+    $orders[] = new DonHang(
+        $row['MA_DH'],
+        $row['MA_KH'],
+        $row['NGAY_TAO'],
+        $row['TONG_TIEN'],
+        $row['GHI_CHU'] ?? '',
+        $row['DIA_CHI'] ?? '',
+        $row['MA_GH'] ?? null,
+        $row['PHUONG_THUC'] ?? 'Tiền mặt',
+        $row['TINH_TRANG']
+    );
+    // Lưu tên khách hàng vào một mảng tạm để dùng trong vòng lặp hiển thị
+    $tenKH[$row['MA_DH']] = $row['TEN_KH'];
+}
+?>
 
     <style>
-
-      .form-control {
-        margin-left: 10px;
-      }
-
-      .form-control:disabled{
-        margin-left: 20px;
-      }
-
-      .ml-30{
-        margin-left: 30px;
-      }
-
-      .ml-15{
-        margin-left: 15px;
-      }
+      .form-control { margin-left: 10px; }
+      .form-control:disabled { margin-left: 20px; }
+      .ml-30 { margin-left: 30px; }
+      .ml-15 { margin-left: 15px; }
     </style>
 
     <!-- Adminorder -->
@@ -56,136 +98,93 @@
           <form class="fillter-date">
             <div>
               <label for="time-start">Từ</label>
-              <input
-                type="date"
-                class="form-control-date"
-                id="time-start-user"
-              />
+              <input type="date" class="form-control-date" id="time-start-user" />
             </div>
             <div>
               <label for="time-end">Đến</label>
-              <input
-                type="date"
-                class="form-control-date"
-                id="time-end-user"
-              />
+              <input type="date" class="form-control-date" id="time-end-user" />
             </div>
           </form>  
-            <div>
-              <select id="province" class="form-control">
-                <option value="">Chọn Tỉnh/Thành</option>
-              </select>
-            </div>
-            <div>
-              <select id="district" class="form-control ml-15" disabled>
-                <option value="">Chọn Quận/Huyện</option>
-              </select>
-            </div>
-            <button type="button" id="search-btn" class="reset-order ml-30"><i class="fa-light fa-magnifying-glass"></i></button>
-            <a href="adminorder.php" class="reset-order"><i class="fa-light fa-arrow-rotate-right"></i></a>
+          <div>
+            <select id="province" class="form-control">
+              <option value="">Chọn Tỉnh/Thành</option>
+            </select>
+          </div>
+          <div>
+            <select id="district" class="form-control ml-15" disabled>
+              <option value="">Chọn Quận/Huyện</option>
+            </select>
+          </div>
+          <button type="button" id="search-btn" class="reset-order ml-30">
+            <i class="fa-light fa-magnifying-glass"></i>
+          </button>
+          <a href="adminorder.php" class="reset-order">
+            <i class="fa-light fa-arrow-rotate-right"></i>
+          </a>
         </div>
       </div>
       <!-- End Adminorder -->
 
       <!-- Show Admin Orders -->
-<!-- Thay thế phần <div class="table"> trong adminorder.php -->
-<div class="table">
-  <table width="100%" id="order-table">
-    <thead>
-      <tr>
-        <td>Mã đơn</td>
-        <td>Khách hàng</td>
-        <td>Ngày đặt</td>
-        <td>Tổng tiền</td>
-        <td>Trạng thái</td>
-        <td>Thao tác</td>
-      </tr>
-    </thead>
-    <tbody id="showOrder">
-    <?php
-include_once 'connect.php';
+      <div class="table">
+        <table width="100%" id="order-table">
+          <thead>
+            <tr>
+              <td>Mã đơn</td>
+              <td>Khách hàng</td>
+              <td>Ngày đặt</td>
+              <td>Tổng tiền</td>
+              <td>Trạng thái</td>
+              <td>Thao tác</td>
+            </tr>
+          </thead>
+          <tbody id="showOrder">
+            <?php if (empty($orders)): ?>
+              <tr><td colspan="6">Không có đơn hàng nào</td></tr>
+            <?php else: ?>
+              <?php foreach ($orders as $order): ?>
+                <?php
+                $madh     = "DH" . $order->getId();
+                $ngaydat  = date('d/m/Y', strtotime($order->getNgayTao()));
+                $tongtien = number_format($order->getTongTien(), 0, ',', '.') . " ₫";
 
-// Thiết lập phân trang
-$limit = 10; // Số đơn hàng mỗi trang
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$start = ($page - 1) * $limit;
+                $status_class = match ($order->getTinhTrang()) {
+                    'Chưa xác nhận'      => 'status-no-complete',
+                    'Đã xác nhận'        => 'status-middle-complete',
+                    'Đã giao thành công' => 'status-complete',
+                    'Đã hủy đơn'         => 'status-destroy-complete',
+                    default              => '',
+                };
+                ?>
+                <tr>
+                  <td><?= $madh ?></td>
+                  <td><?= htmlspecialchars($tenKH[$order->getId()] ?? 'Khách lẻ') ?></td>
+                  <td><?= $ngaydat ?></td>
+                  <td><?= $tongtien ?></td>
+                  <td><span class="<?= $status_class ?>"><?= $order->getTinhTrang() ?></span></td>
+                  <td class="control">
+                    <a href="adminchitiet.php?madh=<?= $order->getId() ?>" class="btn-detail">
+                      <i class="fa-regular fa-eye"></i> Chi tiết
+                    </a>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
 
-// Đếm tổng số đơn hàng
-$total_query = "SELECT COUNT(*) AS total FROM donhang";
-$total_result = mysqli_query($conn, $total_query);
-$total_row = mysqli_fetch_assoc($total_result);
-$total_orders = $total_row['total'];
-$total_pages = ceil($total_orders / $limit);
-
-// Truy vấn với giới hạn và offset
-$sql = "SELECT dh.MA_DH, dh.MA_KH, dh.NGAY_TAO, dh.TONG_TIEN, dh.TINH_TRANG, kh.TEN_KH 
-        FROM donhang dh 
-        JOIN khachhang kh ON dh.MA_KH = kh.MA_KH 
-        ORDER BY dh.NGAY_TAO DESC 
-        LIMIT $start, $limit";
-$result = mysqli_query($conn, $sql);
-
-if (mysqli_num_rows($result) > 0) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $madh = "DH" . $row['MA_DH'];
-        $ngaydat = date('d/m/Y', strtotime($row['NGAY_TAO']));
-        
-        // CÁCH FORMAT TIỀN CHUẨN
-        $tongtien = (int) $row['TONG_TIEN']; 
-        $tongtien1 = number_format($tongtien, 0, ',', '.') . " ₫"; 
-
-        $status_class = '';
-        switch ($row['TINH_TRANG']) {
-            case 'Chưa xác nhận':
-                $status_class = 'status-no-complete';
-                break;
-            case 'Đã xác nhận':
-                $status_class = 'status-middle-complete';
-                break;
-            case 'Đã giao thành công':
-                $status_class = 'status-complete';
-                break;
-            case 'Đã hủy đơn':
-                $status_class = 'status-destroy-complete';
-                break;
-        }
-?>
-<tr>
-    <td><?= $madh; ?></td>
-    <td><?= htmlspecialchars($row['TEN_KH']); ?></td>
-    <td><?= $ngaydat; ?></td>
-    <td><?= $tongtien1; ?></td>
-    <td><span class="<?= $status_class; ?>"><?= $row['TINH_TRANG']; ?></span></td>
-    <td class="control">
-        <a href="adminchitiet.php?madh=<?= $row['MA_DH']; ?>" class="btn-detail">
-            <i class="fa-regular fa-eye"></i> Chi tiết
-        </a>
-    </td>
-</tr>
-<?php
-    }
-} else {
-    echo "<tr><td colspan='6'>Không có đơn hàng nào</td></tr>";
-}
-mysqli_close($conn);
-?>
-    </tbody>
-  </table>
-</div>
-
-<!-- Thêm phân trang -->
-<div class="Pagination">
-  <div class="container">
-    <ul>
-      <?php
-      for ($i = 1; $i <= $total_pages; $i++) {
-        $active_class = ($i == $page) ? 'trang-chinh' : '';
-        echo '<li><a href="?page=' . $i . '" class="inner-trang ' . $active_class . '">' . $i . '</a></li>';
-      }
-      ?>
-    </ul>
-  </div>
-</div>
+      <!-- Phân trang -->
+      <div class="Pagination">
+        <div class="container">
+          <ul>
+            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+              <?php $active_class = ($i == $page) ? 'trang-chinh' : ''; ?>
+              <li><a href="?page=<?= $i ?>" class="inner-trang <?= $active_class ?>"><?= $i ?></a></li>
+            <?php endfor; ?>
+          </ul>
+        </div>
+      </div>
     </div>
     <!-- End Admin Orders-->
 
@@ -196,14 +195,13 @@ mysqli_close($conn);
     <script src="assets/js/admin.js"></script>
     <script>
       $(document).ready(function() {
-        // Fetch provinces from API
+        // Load tỉnh thành
         $.getJSON('https://provinces.open-api.vn/api/p/', function(data) {
           $.each(data, function(index, province) {
             $('#province').append(`<option value="${province.name}">${province.name}</option>`);
           });
         });
 
-        // Fetch districts when a province is selected
         $('#province').change(function() {
           const provinceName = $(this).val();
           $('#district').prop('disabled', true).html('<option value="">Chọn Quận/Huyện</option>');
@@ -222,21 +220,19 @@ mysqli_close($conn);
           }
         });
 
-        // Search button click handler
+        // Tìm kiếm
         $('#search-btn').click(function() {
-          const status = $('#tinh-trang-user').val();
-          const orderId = ''; // No search input for order ID
+          const status    = $('#tinh-trang-user').val();
           const startDate = $('#time-start-user').val();
-          const endDate = $('#time-end-user').val();
-          const province = $('#province').val();
-          const district = $('#district').val();
+          const endDate   = $('#time-end-user').val();
+          const province  = $('#province').val();
+          const district  = $('#district').val();
 
           $.ajax({
             url: 'search_orders.php',
             type: 'POST',
             data: {
               status: status,
-              orderId: orderId,
               startDate: startDate,
               endDate: endDate,
               province: province,
@@ -257,3 +253,7 @@ mysqli_close($conn);
     </script>
   </body>
 </html>
+
+<?php
+ob_end_flush();   // Kết thúc buffer
+?>

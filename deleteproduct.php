@@ -1,50 +1,65 @@
 <?php
 include "./connect.php";
+require_once "model/MonAn.php";
 
 if (!$conn) {
     echo "error: Không thể kết nối đến cơ sở dữ liệu";
     exit;
 }
-
 if (isset($_POST['id'])) {
-    $id = mysqli_real_escape_string($conn, $_POST['id']);
+    $id = $_POST['id'];
     $action = isset($_POST['action']) ? $_POST['action'] : '';
-
     // Kiểm tra trạng thái hiện tại của sản phẩm
-    $check_sql = "SELECT TINH_TRANG FROM sanpham WHERE MA_SP = '$id'";
-    $check_result = mysqli_query($conn, $check_sql);
-
-    if ($check_result && mysqli_num_rows($check_result) > 0) {
-        $row = mysqli_fetch_assoc($check_result);
-        $status = $row['TINH_TRANG'];
-
+    $sql = "SELECT * FROM sanpham WHERE MA_SP = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $monAn = new MonAn(
+            $row['MA_SP'],
+            $row['TEN_SP'],
+            $row['HINH_ANH'],
+            $row['GIA_CA'],
+            $row['MO_TA'],
+            $row['MA_LOAISP'],
+            $row['TINH_TRANG']
+        );
+        $status = $monAn->getTinhTrang();
         if ($action === 'hide' && $status == 1) {
             // Ẩn sản phẩm (TINH_TRANG = 0)
-            $update_sql = "UPDATE sanpham SET TINH_TRANG = 0 WHERE MA_SP = '$id'";
-            if (mysqli_query($conn, $update_sql)) {
+            $update_sql = "UPDATE sanpham SET TINH_TRANG = 0 WHERE MA_SP = ?";
+            $update_stmt = $conn->prepare($update_sql);
+            $update_stmt->bind_param("s", $id);
+            if ($update_stmt->execute()) {
                 echo "success";
             } else {
-                echo "error: " . mysqli_error($conn);
+                echo "error: " . $conn->error;
             }
-
+            $update_stmt->close();
         } elseif ($action === 'delete' && $status == 0) {
             // Xóa vĩnh viễn sản phẩm (TINH_TRANG = -1)
-            $update_sql = "UPDATE sanpham SET TINH_TRANG = -1 WHERE MA_SP = '$id'";
-            if (mysqli_query($conn, $update_sql)) {
+            $update_sql = "UPDATE sanpham SET TINH_TRANG = -1 WHERE MA_SP = ?";
+            $update_stmt = $conn->prepare($update_sql);
+            $update_stmt->bind_param("s", $id);
+            if ($update_stmt->execute()) {
                 echo "success";
             } else {
-                echo "error: " . mysqli_error($conn);
+                echo "error: " . $conn->error;
             }
-
+            $update_stmt->close();
         } else {
             echo "error: Hành động không hợp lệ hoặc trạng thái không khớp.";
         }
     } else {
         echo "error: Không tìm thấy sản phẩm";
     }
+    $stmt->close();
 } else {
     echo "error: Không nhận được ID";
 }
 
-mysqli_close($conn);
+$conn->close();
 ?>

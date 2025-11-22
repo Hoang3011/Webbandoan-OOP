@@ -1,5 +1,6 @@
 <?php
 include "connect.php";
+require_once "model/MonAn.php";
 
 // Kiểm tra dữ liệu gửi từ form
 if (isset($_POST['id'], $_POST['Name'], $_POST['Price'], $_POST['Describtion'], $_POST['Type'], $_POST['Visible'])) {
@@ -46,13 +47,15 @@ if (isset($_POST['id'], $_POST['Name'], $_POST['Price'], $_POST['Describtion'], 
         $stmt_old->close();
     }
 
+    $updatedMonAn = new MonAn($id, $name, $image_path, $price, $desc, $type, $visible);
+
     // Cập nhật dữ liệu đúng cột trong DB
     $stmt = $conn->prepare("
         UPDATE sanpham 
         SET TEN_SP = ?, GIA_CA = ?, MO_TA = ?, MA_LOAISP = ?, HINH_ANH = ?, TINH_TRANG = ? 
         WHERE MA_SP = ?
     ");
-    $stmt->bind_param("sisssii", $name, $price, $desc, $type, $image_path, $visible, $id);
+    $stmt->bind_param("sisssii", $updatedMonAn->getTen(), $updatedMonAn->getGiaCa(), $updatedMonAn->getMoTa(), $updatedMonAn->getMaLoaiSp(), $updatedMonAn->getHinhAnh(), $updatedMonAn->getTinhTrang(), $updatedMonAn->getId());
 
     if ($stmt->execute()) {
         header("Location: adminproduct.php");

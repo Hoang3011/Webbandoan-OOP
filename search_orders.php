@@ -1,75 +1,95 @@
 <?php
 include_once 'connect.php';
+require_once 'model/DonHang.php';   // Class DonHang của bạn
 
-$status = isset($_POST['status']) ? mysqli_real_escape_string($conn, $_POST['status']) : '';
-$orderId = isset($_POST['orderId']) ? (int)$_POST['orderId'] : '';
-$startDate = isset($_POST['startDate']) ? mysqli_real_escape_string($conn, $_POST['startDate']) : '';
-$endDate = isset($_POST['endDate']) ? mysqli_real_escape_string($conn, $_POST['endDate']) : '';
-$province = isset($_POST['province']) ? mysqli_real_escape_string($conn, $_POST['province']) : '';
-$district = isset($_POST['district']) ? mysqli_real_escape_string($conn, $_POST['district']) : '';
+// Lấy dữ liệu POST
+$status    = $_POST['status']    ?? '';
+$startDate = $_POST['startDate'] ?? '';
+$endDate   = $_POST['endDate']   ?? '';
+$province  = $_POST['province']  ?? '';
+$district  = $_POST['district']  ?? '';
 
-$sql = "SELECT dh.MA_DH, dh.MA_KH, dh.NGAY_TAO, dh.TONG_TIEN, dh.TINH_TRANG, kh.TEN_KH 
+// Xây dựng câu SQL
+$sql = "SELECT dh.*, kh.TEN_KH 
         FROM donhang dh 
         JOIN khachhang kh ON dh.MA_KH = kh.MA_KH 
         WHERE 1=1";
 
-if ($status) {
+if ($status !== '') {
+    $status = mysqli_real_escape_string($conn, $status);
     $sql .= " AND dh.TINH_TRANG = '$status'";
 }
-if ($orderId) {
-    $sql .= " AND dh.MA_DH = $orderId";
-}
-if ($startDate) {
+if ($startDate !== '') {
+    $startDate = mysqli_real_escape_string($conn, $startDate);
     $sql .= " AND DATE(dh.NGAY_TAO) >= '$startDate'";
 }
-if ($endDate) {
+if ($endDate !== '') {
+    $endDate = mysqli_real_escape_string($conn, $endDate);
     $sql .= " AND DATE(dh.NGAY_TAO) <= '$endDate'";
 }
-if ($district && $province) {
-    $sql .= " AND dh.DIA_CHI LIKE '%$district%$province%'";
-} elseif ($province) {
-    $sql .= " AND dh.DIA_CHI LIKE '%$province%'";
+if ($district !== '' && $province !== '') {
+    $search = mysqli_real_escape_string($conn, "$district%$province%");
+    $sql .= " AND dh.DIA_CHI LIKE '%$search%'";
+} elseif ($province !== '') {
+    $search = mysqli_real_escape_string($conn, $province);
+    $sql .= " AND dh.DIA_CHI LIKE '%$search%'";
 }
+
+$sql .= " ORDER BY dh.NGAY_TAO DESC";
 
 $result = mysqli_query($conn, $sql);
 
-if (mysqli_num_rows($result) > 0) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $madh = "DH" . $row['MA_DH'];
-        $ngaydat = date('d/m/Y', strtotime($row['NGAY_TAO']));
-        $tongtien = number_format((int)$row['TONG_TIEN'], 0, ',', '.') . " ₫";
-        $status_class = '';
-        switch ($row['TINH_TRANG']) {
-            case 'Chưa xác nhận':
-                $status_class = 'status-no-complete';
-                break;
-            case 'Đã xác nhận':
-                $status_class = 'status-middle-complete';
-                break;
-            case 'Đã giao thành công':
-                $status_class = 'status-complete';
-                break;
-            case 'Đã hủy đơn':
-                $status_class = 'status-destroy-complete';
-                break;
-        }
-?>
-        <tr>
-            <td><?php echo $madh; ?></td>
-            <td><?php echo htmlspecialchars($row['TEN_KH']); ?></td>
-            <td><?php echo $ngaydat; ?></td>
-            <td><?php echo $tongtien; ?></td>
-            <td><span class="<?php echo $status_class; ?>"><?php echo $row['TINH_TRANG']; ?></span></td>
-            <td class="control">
-                <a href="adminchitiet.php?madh=<?php echo $row['MA_DH']; ?>" class="btn-detail">
-                    <i class="fa-regular fa-eye"></i> Chi tiết
-                </a>
-            </td>
-        </tr>
-<?php
-    }
-} else {
+if (!$result || mysqli_num_rows($result) === 0) {
     echo "<tr><td colspan='6'>Không tìm thấy đơn hàng nào</td></tr>";
+    exit();
+}
+
+// Tạo mảng lưu tên khách hàng (vì class DonHang chưa có thuộc tính này)
+$tenKH = [];
+$orders = [];
+
+while ($row = mysqli_fetch_assoc($result)) {
+    $orders[] = new DonHang(
+        $row['MA_DH'],
+        $row['MA_KH'],
+        $row['NGAY_TAO'],
+        $row['TONG_TIEN'],
+        $row['GHI_CHU'] ?? '',
+        $row['DIA_CHI'] ?? '',
+        $row['MA_GH'] ?? null,
+        $row['PHUONG_THUC'] ?? 'Tiền mặt',
+        $row['TINH_TRANG']
+    );
+    $tenKH[$row['MA_DH']] = $row['TEN_KH'];   // Lưu tên KH theo MA_DH
+}
+
+// Xuất HTML giống hệt bản cũ
+foreach ($orders as $order) {
+    $madh     = "DH" . $order->getId();
+    $ngaydat  = date('d/m/Y', strtotime($order->getNgayTao()));
+    $tongtien = number_format((int)$order->getTongTien(), 0, ',', '.') . " ₫";
+
+    $status_class = match ($order->getTinhTrang()) {
+        'Chưa xác nhận'      => 'status-no-complete',
+        'Đã xác nhận'        => 'status-middle-complete',
+        'Đã giao thành công' => 'status-complete',
+        'Đã hủy đơn'         => 'status-destroy-complete',
+        default              => '',
+    };
+    ?>
+    <tr>
+        <td><?php echo $madh; ?></td>
+        <td><?php echo htmlspecialchars($tenKH[$order->getId()] ?? 'Khách lẻ'); ?></td>
+        <td><?php echo $ngaydat; ?></td>
+        <td><?php echo $tongtien; ?></td>
+        <td><span class="<?php echo $status_class; ?>"><?php echo $order->getTinhTrang(); ?></span></td>
+        <td class="control">
+            <a href="adminchitiet.php?madh=<?php echo $order->getId(); ?>" class="btn-detail">
+                <i class="fa-regular fa-eye"></i> Chi tiết
+            </a>
+        </td>
+    </tr>
+    <?php
 }
 
 mysqli_close($conn);

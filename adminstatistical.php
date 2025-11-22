@@ -1,93 +1,39 @@
 <?php
 session_start();
-
-// Database connection
-try {
-    $pdo = new PDO("mysql:host=127.0.0.1;dbname=webbandoan8;charset=utf8", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
+if (!isset($_SESSION['username'])) {
+    header("Location: adminlogin.php");
+    exit();
 }
 
-// Parameters for filtering and pagination
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
-$sort_order = isset($_GET['sort']) ? (int)$_GET['sort'] : 2; // 1: ASC, 2: DESC
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+include_once "connect.php";
+require_once "model/ThongKe.php";
+
+// Khởi tạo đối tượng ThongKe
+$thongKe = new ThongKe($conn);
+
+// Lấy tham số lọc
+$search      = $_GET['search'] ?? '';
+$start_date  = $_GET['start_date'] ?? '';
+$end_date    = $_GET['end_date'] ?? '';
+$sort_order  = (int)($_GET['sort'] ?? 2); // 1: tăng dần, 2: giảm dần
+$page        = max(1, (int)($_GET['page'] ?? 1));
 $items_per_page = 5;
 
-// Build SQL query for customer statistics
-$sql = "
-    SELECT 
-        k.MA_KH AS customerId, 
-        k.TEN_KH AS customerName, 
-        COUNT(DISTINCT d.MA_DH) AS orderCount, 
-        COALESCE(SUM(d.TONG_TIEN), 0) AS total
-    FROM khachhang k
-    LEFT JOIN donhang d ON k.MA_KH = d.MA_KH
-    WHERE d.TINH_TRANG = 'Đã giao thành công'
-";
+// === GỌI HÀM TỪ CLASS THONGKE ĐỂ LẤY DỮ LIỆU ===
+$customers = $thongKe->thongKeKhachHangDoanhThu([
+    'search'      => $search,
+    'start_date'  => $start_date,
+    'end_date'    => $end_date,
+    'sort'        => $sort_order == 1 ? 'ASC' : 'DESC'
+]);
 
-// Add search filter
-if ($search) {
-    $sql .= " AND k.TEN_KH LIKE :search";
-}
-
-// Add date filters
-if ($start_date) {
-    $sql .= " AND DATE(d.NGAY_TAO) >= :start_date";
-}
-if ($end_date) {
-    $sql .= " AND DATE(d.NGAY_TAO) <= :end_date";
-}
-
-$sql .= " GROUP BY k.MA_KH, k.TEN_KH";
-
-// Add sorting
-$sql .= $sort_order == 1 ? " ORDER BY total ASC" : " ORDER BY total DESC";
-
-// Pagination
-$offset = ($page - 1) * $items_per_page;
-$sql_paginated = $sql . " LIMIT :offset, :items_per_page";
-
-// Prepare and execute query for total customers and revenue
-$stmt = $pdo->prepare($sql);
-if ($search) {
-    $stmt->bindValue(':search', "%$search%");
-}
-if ($start_date) {
-    $stmt->bindValue(':start_date', $start_date);
-}
-if ($end_date) {
-    $stmt->bindValue(':end_date', $end_date);
-}
-$stmt->execute();
-$customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Calculate total customers and revenue
 $total_customers = count($customers);
-$total_revenue = array_sum(array_column($customers, 'total'));
+$total_revenue   = array_sum(array_column($customers, 'total'));
 
-// Prepare and execute paginated query
-$stmt_paginated = $pdo->prepare($sql_paginated);
-if ($search) {
-    $stmt_paginated->bindValue(':search', "%$search%");
-}
-if ($start_date) {
-    $stmt_paginated->bindValue(':start_date', $start_date);
-}
-if ($end_date) {
-    $stmt_paginated->bindValue(':end_date', $end_date);
-}
-$stmt_paginated->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt_paginated->bindValue(':items_per_page', $items_per_page, PDO::PARAM_INT);
-$stmt_paginated->execute();
-$paginated_customers = $stmt_paginated->fetchAll(PDO::FETCH_ASSOC);
-
-// Calculate total pages
+// Phân trang
+$offset = ($page - 1) * $items_per_page;
+$paginated_customers = array_slice($customers, $offset, $items_per_page);
 $total_pages = ceil($total_customers / $items_per_page);
-$page = max(1, min($page, $total_pages));
 ?>
 
 <!DOCTYPE html>

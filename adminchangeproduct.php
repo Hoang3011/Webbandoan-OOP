@@ -1,5 +1,6 @@
 <?php
 include "connect.php";
+require_once "model/MonAn.php";
 
 if (isset($_GET['id'])) {
     $id = intval($_GET['id']);
@@ -11,6 +12,15 @@ if (isset($_GET['id'])) {
 
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
+        $monAn = new MonAn(
+            $row['MA_SP'],
+            $row['TEN_SP'],
+            $row['HINH_ANH'],
+            $row['GIA_CA'],
+            $row['MO_TA'],
+            $row['MA_LOAISP'],
+            $row['TINH_TRANG']
+        );
     } else {
         echo "<h2>Không tìm thấy sản phẩm!</h2>";
         exit();
@@ -118,7 +128,7 @@ if (isset($_GET['id'])) {
                         <form action="updateproduct.php" method="POST" enctype="multipart/form-data">
                             <div class="inner-item">
                                 <div class="inner-img">
-                                    <img id="preview" src="<?php echo htmlspecialchars($row['HINH_ANH']); ?>" />
+                                    <img id="preview" src="<?php echo htmlspecialchars($monAn->getHinhAnh()); ?>" />
                                 </div>
                                 <div class="inner-choose">
                                     <label for="choose">
@@ -132,36 +142,36 @@ if (isset($_GET['id'])) {
                         <div class="inner-item">
                             <div class="form-group">
                                 <label for="name">Tên món</label>
-                                <input type="text" id="name" name="Name" class="form-control" placeholder="Nhập tên món" value="<?php echo htmlspecialchars($row['TEN_SP']); ?>" />
+                                <input type="text" id="name" name="Name" class="form-control" placeholder="Nhập tên món" value="<?php echo htmlspecialchars($monAn->getTen()); ?>" />
                             </div>
                             <div class="inner-select">
                                 <label for="select">Chọn món</label>
                                 <select name="Type" id="select" class="form-control">
-                                    <option value="L001" <?php echo ($row['MA_LOAISP'] == 'L001') ? 'selected' : ''; ?>>Món chay</option>
-                                    <option value="L002" <?php echo ($row['MA_LOAISP'] == 'L002') ? 'selected' : ''; ?>>Món mặn</option>
-                                    <option value="L003" <?php echo ($row['MA_LOAISP'] == 'L003') ? 'selected' : ''; ?>>Món lẩu</option>
-                                    <option value="L004" <?php echo ($row['MA_LOAISP'] == 'L004') ? 'selected' : ''; ?>>Món ăn vặt</option>
-                                    <option value="L005" <?php echo ($row['MA_LOAISP'] == 'L005') ? 'selected' : ''; ?>>Món tráng miệng</option>
-                                    <option value="L006" <?php echo ($row['MA_LOAISP'] == 'L007') ? 'selected' : ''; ?>>Nước uống</option>
-                                    <option value="L007" <?php echo ($row['MA_LOAISP'] == 'L007') ? 'selected' : ''; ?>>Hải sản</option>
+                                    <option value="L001" <?php echo ($monAn->getMaLoaiSp() == 'L001') ? 'selected' : ''; ?>>Món chay</option>
+                                    <option value="L002" <?php echo ($monAn->getMaLoaiSp() == 'L002') ? 'selected' : ''; ?>>Món mặn</option>
+                                    <option value="L003" <?php echo ($monAn->getMaLoaiSp() == 'L003') ? 'selected' : ''; ?>>Món lẩu</option>
+                                    <option value="L004" <?php echo ($monAn->getMaLoaiSp() == 'L004') ? 'selected' : ''; ?>>Món ăn vặt</option>
+                                    <option value="L005" <?php echo ($monAn->getMaLoaiSp() == 'L005') ? 'selected' : ''; ?>>Món tráng miệng</option>
+                                    <option value="L006" <?php echo ($monAn->getMaLoaiSp() == 'L006') ? 'selected' : ''; ?>>Nước uống</option>
+                                    <option value="L007" <?php echo ($monAn->getMaLoaiSp() == 'L007') ? 'selected' : ''; ?>>Hải sản</option>
                                 </select>
                             </div>
                             <div class="inner-select">
                                 <label for="visible">Trạng thái</label>
                                 <select name="Visible" id="visible" class="form-control">
-                                    <option value="1" <?php echo ($row['TINH_TRANG'] == 1) ? 'selected' : ''; ?>>Đang kinh doanh</option>
-                                    <option value="0" <?php echo ($row['TINH_TRANG'] == 0) ? 'selected' : ''; ?>>Ngừng kinh doanh</option>
+                                    <option value="1" <?php echo ($monAn->getTinhTrang() == 1) ? 'selected' : ''; ?>>Đang kinh doanh</option>
+                                    <option value="0" <?php echo ($monAn->getTinhTrang() == 0) ? 'selected' : ''; ?>>Ngừng kinh doanh</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label for="sell">Giá bán</label>
-                                <input type="text" id="sell" name="Price" class="form-control" placeholder="Nhập giá bán" value="<?php echo htmlspecialchars(number_format($row['GIA_CA'], 0, ',', '.')); ?>" />
+                                <input type="text" id="sell" name="Price" class="form-control" placeholder="Nhập giá bán" value="<?php echo htmlspecialchars(number_format($monAn->getGiaCa(), 0, ',', '.')); ?>" />
                             </div>
                             <div class="form-group">
                                 <label for="desc">Mô tả</label>
-                                <textarea class="form-control" placeholder="Nhập mô tả món ăn..." name="Describtion"><?php echo htmlspecialchars($row['MO_TA']); ?></textarea>
+                                <textarea class="form-control" placeholder="Nhập mô tả món ăn..." name="Describtion"><?php echo htmlspecialchars($monAn->getMoTa()); ?></textarea>
                             </div>
-                            <input type="hidden" name="id" value="<?php echo $id; ?>" />
+                            <input type="hidden" name="id" value="<?php echo $monAn->getId(); ?>" />
                             <div class="inner-add">
                                 <button class="inner-nut" type="submit">
                                     <i class="fa-light fa-pencil"></i> Lưu thay đổi

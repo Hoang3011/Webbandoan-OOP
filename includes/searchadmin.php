@@ -5,6 +5,7 @@ ini_set('display_errors', 0);
 ob_clean();
 
 include "../connect.php";
+require_once "../model/MonAn.php";
 if ($conn->connect_error) {
     http_response_code(500);
     die(json_encode(["error" => "Kết nối thất bại: " . $conn->connect_error]));
@@ -71,14 +72,23 @@ $result = $stmt->get_result();
 
 $products = [];
 while ($row = $result->fetch_assoc()) {
+    $monAn = new MonAn(
+        $row["MA_SP"],
+        $row["TEN_SP"],
+        $row["HINH_ANH"],
+        $row["GIA_CA"],
+        $row["MO_TA"],
+        $row["MA_LOAISP"],
+        $row["TINH_TRANG"]
+    );
     $products[] = [
-        "MA_SP" => $row["MA_SP"],
-        "TEN_SP" => $row["TEN_SP"],
-        "MO_TA" => $row["MO_TA"],
+        "MA_SP" => $monAn->getId(),
+        "TEN_SP" => $monAn->getTen(),
+        "MO_TA" => $monAn->getMoTa(),
         "LOAI" => $row["TEN_LOAISP"], // ✅ giờ có dữ liệu đúng
-        "HINH_ANH" => "http://localhost/Webbandoan2/" . str_replace("\\", "/", $row["HINH_ANH"]),
-        "TINH_TRANG" => (int)$row["TINH_TRANG"],
-        "GIA_BAN" => (int)$row["GIA_CA"],
+        "HINH_ANH" => "http://localhost/Webbandoan3/" . str_replace("\\", "/", $monAn->getHinhAnh()),
+        "TINH_TRANG" => (int)$monAn->getTinhTrang(),
+        "GIA_BAN" => (int)$monAn->getGiaCa(),
     ];
 }
 

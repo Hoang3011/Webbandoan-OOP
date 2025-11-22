@@ -1,107 +1,45 @@
 <?php
 session_start();
-
-// Database connection
-try {
-    $pdo = new PDO("mysql:host=127.0.0.1;dbname=webbandoan8;charset=utf8", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
+if (!isset($_SESSION['username'])) {
+    header("Location: adminlogin.php");
+    exit();
 }
 
-// Parameters for filtering and pagination
+include_once "connect.php";
+require_once "model/ThongKe.php";
+
+$thongKe = new ThongKe($conn);
+
+// Lấy tham số
 $customerId = isset($_GET['customerId']) ? (int)$_GET['customerId'] : 0;
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
-$sort_order = isset($_GET['sort']) ? (int)$_GET['sort'] : 2; // 1: ASC, 2: DESC
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$search     = $_GET['search'] ?? '';
+$start_date = $_GET['start_date'] ?? '';
+$end_date   = $_GET['end_date'] ?? '';
+$sort_order = (int)($_GET['sort'] ?? 2); // 1: ASC, 2: DESC
+$page       = max(1, (int)($_GET['page'] ?? 1));
 $items_per_page = 5;
 
-// Validate customerId
 if ($customerId <= 0) {
     die("Khách hàng không hợp lệ.");
 }
 
-// Fetch customer information
-$sql_customer = "SELECT TEN_KH FROM khachhang WHERE MA_KH = :customerId";
-$stmt_customer = $pdo->prepare($sql_customer);
-$stmt_customer->bindValue(':customerId', $customerId, PDO::PARAM_INT);
-$stmt_customer->execute();
-$customer = $stmt_customer->fetch(PDO::FETCH_ASSOC);
-
+// Dùng class để lấy thông tin khách + đơn hàng
+$customer = $thongKe->layThongTinKhachHang($customerId);
 if (!$customer) {
     die("Khách hàng không tồn tại.");
 }
 
-// Build SQL query for orders
-$sql = "
-    SELECT 
-        d.MA_DH AS orderId,
-        DATE_FORMAT(d.NGAY_TAO, '%d/%m/%Y') AS orderDate,
-        d.TONG_TIEN AS total
-    FROM donhang d
-    WHERE d.MA_KH = :customerId AND d.TINH_TRANG = 'Đã giao thành công'
-";
+$orders = $thongKe->layDonHangCuaKhachHang($customerId, [
+    'search'     => $search,
+    'start_date' => $start_date,
+    'end_date'   => $end_date,
+    'sort'       => $sort_order == 1 ? 'ASC' : 'DESC'
+]);
 
-// Add search filter (by orderId)
-if ($search) {
-    $sql .= " AND d.MA_DH LIKE :search";
-}
-
-// Add date filters
-if ($start_date) {
-    $sql .= " AND DATE(d.NGAY_TAO) >= :start_date";
-}
-if ($end_date) {
-    $sql .= " AND DATE(d.NGAY_TAO) <= :end_date";
-}
-
-$sql .= " GROUP BY d.MA_DH, d.NGAY_TAO";
-
-// Add sorting
-$sql .= $sort_order == 1 ? " ORDER BY total ASC" : " ORDER BY total DESC";
-
-// Pagination
-$offset = ($page - 1) * $items_per_page;
-$sql_paginated = $sql . " LIMIT :offset, :items_per_page";
-
-// Prepare and execute query for total orders
-$stmt = $pdo->prepare($sql);
-$stmt->bindValue(':customerId', $customerId, PDO::PARAM_INT);
-if ($search) {
-    $stmt->bindValue(':search', "%$search%");
-}
-if ($start_date) {
-    $stmt->bindValue(':start_date', $start_date);
-}
-if ($end_date) {
-    $stmt->bindValue(':end_date', $end_date);
-}
-$stmt->execute();
-$orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Calculate total orders and pages
 $total_orders = count($orders);
-$total_pages = ceil($total_orders / $items_per_page);
-$page = max(1, min($page, $total_pages));
-
-// Prepare and execute paginated query
-$stmt_paginated = $pdo->prepare($sql_paginated);
-$stmt_paginated->bindValue(':customerId', $customerId, PDO::PARAM_INT);
-if ($search) {
-    $stmt_paginated->bindValue(':search', "%$search%");
-}
-if ($start_date) {
-    $stmt_paginated->bindValue(':start_date', $start_date);
-}
-if ($end_date) {
-    $stmt_paginated->bindValue(':end_date', $end_date);
-}
-$stmt_paginated->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt_paginated->bindValue(':items_per_page', $items_per_page, PDO::PARAM_INT);
-$stmt_paginated->execute();
-$paginated_orders = $stmt_paginated->fetchAll(PDO::FETCH_ASSOC);
+$total_pages  = ceil($total_orders / $items_per_page);
+$offset       = ($page - 1) * $items_per_page;
+$paginated_orders = array_slice($orders, $offset, $items_per_page);
 ?>
 
 <!DOCTYPE html>
@@ -121,11 +59,7 @@ $paginated_orders = $stmt_paginated->fetchAll(PDO::FETCH_ASSOC);
 <div class="wrapper d-flex align-items-stretch">
       <nav id="sidebar">
         <div class="custom-menu">
-          <button
-            type="button"
-            id="sidebarCollapse"
-            class="btn btn-primary"
-          ></button>
+          <button type="button" id="sidebarCollapse" class="btn btn-primary"></button>
         </div>
         <div class="img bg-wrap text-center py-4">
           <div class="user-logo">
@@ -135,66 +69,35 @@ $paginated_orders = $stmt_paginated->fetchAll(PDO::FETCH_ASSOC);
           </div>
         </div>
         <ul class="list-unstyled components mb-5">
-          <li>
-            <a href="admin.php"
-              ><i class="fa-light fa-house"></i> Trang tổng quan</a
-            >
-          </li>
-          <li>
-            <a href="adminproduct.php"
-              ><i class="fa-light fa-pot-food"></i> Sản phẩm</a
-            >
-          </li>
-          <li>
-            <a href="admincustomer.php"
-              ><i class="fa-light fa-users"></i> Khách hàng</a
-            >
-          </li>
-          <li>
-            <a href="adminorder.php"
-              ><i class="fa-light fa-basket-shopping"></i> Đơn hàng</a
-            >
-          </li>
-          <li class="active">
-            <a href="adminstatistical.php"
-              ><i class="fa-light fa-chart-simple"></i> Thống kê</a
-            >
-          </li>
+          <li><a href="admin.php"><i class="fa-light fa-house"></i> Trang tổng quan</a></li>
+          <li><a href="adminproduct.php"><i class="fa-light fa-pot-food"></i> Sản phẩm</a></li>
+          <li><a href="admincustomer.php"><i class="fa-light fa-users"></i> Khách hàng</a></li>
+          <li><a href="adminorder.php"><i class="fa-light fa-basket-shopping"></i> Đơn hàng</a></li>
+          <li class="active"><a href="adminstatistical.php"><i class="fa-light fa-chart-simple"></i> Thống kê</a></li>
         </ul>
 
         <ul class="sidebar-list">
-         <!-- Assuming this is part of a larger admin.php file -->
           <li class="sidebar-list-item user-logout">
             <a href="#" class="sidebar-link">
               <div class="sidebar-icon"><i class="fa-light fa-circle-user"></i></div>
               <div class="hidden-sidebar" id="name-acc">Khoa</div>
             </a>
           </li>
-
           <script>
-            // Function to get cookie by name
             function getCookie(name) {
               const nameEQ = name + "=";
               const ca = document.cookie.split(';');
               for (let i = 0; i < ca.length; i++) {
                 let c = ca[i];
-                while (c.charAt(0) == ' ') {
-                  c = c.substring(1, c.length);
-                }
-                if (c.indexOf(nameEQ) == 0) {
-                  return c.substring(nameEQ.length, c.length);
-                }
+                while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
               }
               return null;
             }
-
-            // Update username display from cookie
             window.onload = function() {
               const username = getCookie("username");
               const nameElement = document.getElementById("name-acc");
-              if (username && nameElement) {
-                nameElement.textContent = username;
-              }
+              if (username && nameElement) nameElement.textContent = username;
             };
           </script>
           <li class="sidebar-list-item user-logout">
@@ -207,24 +110,20 @@ $paginated_orders = $stmt_paginated->fetchAll(PDO::FETCH_ASSOC);
       </nav>
 
       <script>
-  const sidebarItems = document.querySelectorAll('#sidebar .components li');
-  const currentPath = window.location.pathname;
-
-  // Kiểm tra URL hiện tại để đặt "active" khi tải trang
-  sidebarItems.forEach(item => {
-    const link = item.querySelector('a').getAttribute('href');
-    if (currentPath.includes(link)) {
-      sidebarItems.forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-    }
-
-    // Xử lý sự kiện click
-    item.addEventListener('click', function() {
-      sidebarItems.forEach(i => i.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-</script>
+        const sidebarItems = document.querySelectorAll('#sidebar .components li');
+        const currentPath = window.location.pathname;
+        sidebarItems.forEach(item => {
+          const link = item.querySelector('a').getAttribute('href');
+          if (currentPath.includes(link)) {
+            sidebarItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+          }
+          item.addEventListener('click', function() {
+            sidebarItems.forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+          });
+        });
+      </script>
 
         <div class="adminthongkechitiet">
             <div class="admin-control">

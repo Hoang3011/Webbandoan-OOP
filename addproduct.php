@@ -1,5 +1,6 @@
 <?php
 include "connect.php";
+require_once "model/MonAn.php";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['Name'], $_POST['Price'], $_POST['Describtion'], $_POST['Type'])) {
     $name = mysqli_real_escape_string($conn, $_POST['Name']);
@@ -37,9 +38,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['Name'], $_POST['Price'
         exit();
     }
 
+    $monAn = new MonAn(null, $name, $image_path, $price, $desc, $type, 1);
+
     // Thêm dữ liệu vào bảng `sanpham`
     $stmt = $conn->prepare("INSERT INTO sanpham (TEN_SP, GIA_CA, MO_TA, MA_LOAISP, HINH_ANH, TINH_TRANG) VALUES (?, ?, ?, ?, ?, 1)");
-    $stmt->bind_param("sisss", $name, $price, $desc, $type, $image_path);
+    $stmt->bind_param("sisss", $monAn->getTen(), $monAn->getGiaCa(), $monAn->getMoTa(), $monAn->getMaLoaiSp(), $monAn->getHinhAnh());
 
     if ($stmt->execute()) {
         header("Location: adminproduct.php");

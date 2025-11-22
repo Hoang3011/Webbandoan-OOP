@@ -13,7 +13,10 @@
   </head>
 
   <body>
-    <?php include_once "includes/headeradmin.php"; ?>
+    <?php 
+    include_once "includes/headeradmin.php"; 
+    require_once "model/MonAn.php";
+    ?>
 
 <div class="admin-product">
   <div class="admin-control">
@@ -66,16 +69,25 @@
 
       while ($row = mysqli_fetch_assoc($result)) {
         if ($row['TINH_TRANG'] == -1) continue; // bỏ qua sản phẩm bị xóa
-        $borderStyle = ($row['TINH_TRANG'] == 0) ? 'style="border: 1px solid red;"' : '';
-        $formattedPrice = number_format($row['GIA_CA'], 0, ',', '.') . 'đ';
+        $monAn = new MonAn(
+            $row['MA_SP'],
+            $row['TEN_SP'],
+            $row['HINH_ANH'],
+            $row['GIA_CA'],
+            $row['MO_TA'],
+            $row['MA_LOAISP'],
+            $row['TINH_TRANG']
+        );
+        $borderStyle = ($monAn->getTinhTrang() == 0) ? 'style="border: 1px solid red;"' : '';
+        $formattedPrice = number_format($monAn->getGiaCa(), 0, ',', '.') . 'đ';
       ?>
       <div class="col-12">
-        <div class="list" data-id="<?= $row['MA_SP']; ?>" <?= $borderStyle; ?>>
+        <div class="list" data-id="<?= $monAn->getId(); ?>" <?= $borderStyle; ?>>
           <div class="list-left">
-            <img src="<?= $row['HINH_ANH']; ?>" alt="<?= htmlspecialchars($row['TEN_SP']); ?>" />
+            <img src="<?= $monAn->getHinhAnh(); ?>" alt="<?= htmlspecialchars($monAn->getTen()); ?>" />
             <div class="list-info">
-              <h4><?= htmlspecialchars($row['TEN_SP']); ?></h4>
-              <p><?= htmlspecialchars($row['MO_TA']); ?></p>
+              <h4><?= htmlspecialchars($monAn->getTen()); ?></h4>
+              <p><?= htmlspecialchars($monAn->getMoTa()); ?></p>
               <div class="list-category"><?= htmlspecialchars($row['TEN_LOAISP']); ?></div>
             </div>
           </div>
@@ -83,10 +95,10 @@
             <div class="list-price"><?= $formattedPrice; ?></div>
             <div class="list-control">
               <div class="list-tool">
-                <a href="adminchangeproduct.php?id=<?= $row['MA_SP']; ?>" class="btn-edit">
+                <a href="adminchangeproduct.php?id=<?= $monAn->getId(); ?>" class="btn-edit">
                   <i class="fa-light fa-pen-to-square"></i>
                 </a>
-                <button class="btn-delete" onclick="confirmDelete(<?= $row['MA_SP']; ?>)">
+                <button class="btn-delete" onclick="confirmDelete(<?= $monAn->getId(); ?>)">
                   <i class="fa-regular fa-trash"></i>
                 </button>
               </div>

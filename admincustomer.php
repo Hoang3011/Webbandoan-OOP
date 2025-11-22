@@ -1,21 +1,49 @@
 <?php
 include 'connect.php';
+require_once "model/TaiKhoan.php";
+require_once "model/KhachHang.php";
 
 if (isset($_GET['action']) && isset($_GET['id'])) {
     $action = $_GET['action'];
     $id = $_GET['id'];
 
-    if ($action == 'lock') {
-        $sql = "UPDATE khachhang SET TRANG_THAI = 'Locked' WHERE MA_KH = '$id'";
-    } elseif ($action == 'unlock') {
-        $sql = "UPDATE khachhang SET TRANG_THAI = 'Active' WHERE MA_KH = '$id'";
-    }
+    // Load the customer
+    $sql = "SELECT * FROM khachhang WHERE MA_KH = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $khachHang = new KhachHang(
+            $row['MA_KH'],
+            $row['TEN_KH'],
+            $row['MAT_KHAU'],
+            $row['DIA_CHI'],
+            $row['SO_DIEN_THOAI'],
+            $row['TRANG_THAI'],
+            $row['NGAY_TAO']
+        );
 
-    if (isset($sql)) {
-        mysqli_query($conn, $sql);
+        if ($action == 'lock') {
+            $khachHang->setTrangThai('Locked');
+        } elseif ($action == 'unlock') {
+            $khachHang->setTrangThai('Active');
+        }
+
+        // Update the database
+        $update_sql = "UPDATE khachhang SET TRANG_THAI = ? WHERE MA_KH = ?";
+        $update_stmt = $conn->prepare($update_sql);
+        $trangThai = $khachHang->getTrangThai();
+        $maKh = $khachHang->getId();
+        $update_stmt->bind_param("ss", $trangThai, $maKh);
+        $update_stmt->execute();
+        $update_stmt->close();
+
         header("Location: admincustomer.php");
         exit();
     }
+    $stmt->close();
 }
 
 if (isset($_POST['save_customer'])) {
@@ -25,16 +53,51 @@ if (isset($_POST['save_customer'])) {
     $diachi = $_POST['diachi'];
     $matkhau = $_POST['matkhau'];
 
-    $sql = "UPDATE khachhang SET 
-            TEN_KH = '$tenkh',
-            SO_DIEN_THOAI = '$sodienthoai',
-            DIA_CHI = '$diachi',
-            MAT_KHAU = '$matkhau'
-            WHERE MA_KH = '$makh'";
+    // Load existing customer
+    $sql = "SELECT * FROM khachhang WHERE MA_KH = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $makh);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $khachHang = new KhachHang(
+            $row['MA_KH'],
+            $row['TEN_KH'],
+            $row['MAT_KHAU'],
+            $row['DIA_CHI'],
+            $row['SO_DIEN_THOAI'],
+            $row['TRANG_THAI'],
+            $row['NGAY_TAO']
+        );
 
-    mysqli_query($conn, $sql);
-    header("Location: admincustomer.php");
-    exit();
+        // Update properties
+        $khachHang->setTen($tenkh);
+        $khachHang->setSoDienThoai($sodienthoai);
+        $khachHang->setDiaChi($diachi);
+        $khachHang->setMatKhau($matkhau);
+
+        // Update database
+        $update_sql = "UPDATE khachhang SET 
+            TEN_KH = ?,
+            SO_DIEN_THOAI = ?,
+            DIA_CHI = ?,
+            MAT_KHAU = ?
+            WHERE MA_KH = ?";
+        $update_stmt = $conn->prepare($update_sql);
+        $ten = $khachHang->getTen();
+        $soDienThoai = $khachHang->getSoDienThoai();
+        $diaChi = $khachHang->getDiaChi();
+        $matKhau = $khachHang->getMatKhau();
+        $maKh = $khachHang->getId();
+        $update_stmt->bind_param("sssss", $ten, $soDienThoai, $diaChi, $matKhau, $maKh);
+        $update_stmt->execute();
+        $update_stmt->close();
+
+        header("Location: admincustomer.php");
+        exit();
+    }
+    $stmt->close();
 }
 ?>
 <!DOCTYPE html>
@@ -60,9 +123,20 @@ if (isset($_POST['save_customer'])) {
         $sodienthoai = $_POST['sodienthoai'];
         $ngaytao = date('Y-m-d');  // Set NGAY_TAO to current date
 
+        $khachHang = new KhachHang(null, $tenkh, $matkhau, $diachi, $sodienthoai, 'Active', $ngaytao);
+
         $sql = "INSERT INTO khachhang(TEN_KH, MAT_KHAU, DIA_CHI, SO_DIEN_THOAI, TRANG_THAI, NGAY_TAO)
-                VALUES('$tenkh','$matkhau','$diachi','$sodienthoai', 'Active', '$ngaytao')";
-        mysqli_query($conn, $sql);
+                VALUES(?, ?, ?, ?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        $ten = $khachHang->getTen();
+        $matKhau = $khachHang->getMatKhau();
+        $diaChi = $khachHang->getDiaChi();
+        $soDienThoai = $khachHang->getSoDienThoai();
+        $trangThai = $khachHang->getTrangThai();
+        $ngayTao = $khachHang->getNgayTao();
+        $stmt->bind_param("ssssss", $ten, $matKhau, $diaChi, $soDienThoai, $trangThai, $ngayTao);
+        $stmt->execute();
+        $stmt->close();
     }
     ?>
     <div class="admin-customer">
@@ -115,15 +189,24 @@ if (isset($_POST['save_customer'])) {
             $sql = "SELECT * FROM khachhang";
             $result = mysqli_query($conn, $sql);
             while ($row = mysqli_fetch_array($result)) {
-                $modalId = "editModal-" . $row['MA_KH'];
+                $khachHang = new KhachHang(
+                    $row['MA_KH'],
+                    $row['TEN_KH'],
+                    $row['MAT_KHAU'],
+                    $row['DIA_CHI'],
+                    $row['SO_DIEN_THOAI'],
+                    $row['TRANG_THAI'],
+                    $row['NGAY_TAO']
+                );
+                $modalId = "editModal-" . $khachHang->getId();
             ?>
             <tr>
-              <td><?php echo $row['MA_KH'] ?></td>
-              <td><?php echo $row['TEN_KH'] ?></td>
-              <td><?php echo $row['SO_DIEN_THOAI'] ?></td>
-              <td><?php echo $row['MAT_KHAU'] ?></td>
+              <td><?php echo $khachHang->getId() ?></td>
+              <td><?php echo $khachHang->getTen() ?></td>
+              <td><?php echo $khachHang->getSoDienThoai() ?></td>
+              <td><?php echo $khachHang->getMatKhau() ?></td>
               <td>
-                <?php if ($row['TRANG_THAI'] == 'Locked'): ?>
+                <?php if ($khachHang->getTrangThai() == 'Locked'): ?>
                   <span class="status-no-complete">Bị khóa</span>
                 <?php else: ?>
                   <span class="status-complete">Đang hoạt động</span>
@@ -133,12 +216,12 @@ if (isset($_POST['save_customer'])) {
                 <a href="#" class="btn-edit" data-toggle="modal" data-target="#<?php echo $modalId ?>">
                   <i class="fa-light fa-pen-to-square"></i>
                 </a>
-                <?php if ($row['TRANG_THAI'] == 'Locked'): ?>
-                  <a href="admincustomer.php?action=unlock&id=<?php echo $row['MA_KH'] ?>" class="btn-delete">
+                <?php if ($khachHang->getTrangThai() == 'Locked'): ?>
+                  <a href="admincustomer.php?action=unlock&id=<?php echo $khachHang->getId() ?>" class="btn-delete">
                     <i class="fa-solid fa-lock-open"></i>
                   </a>
                 <?php else: ?>
-                  <a href="admincustomer.php?action=lock&id=<?php echo $row['MA_KH'] ?>" class="btn-delete">
+                  <a href="admincustomer.php?action=lock&id=<?php echo $khachHang->getId() ?>" class="btn-delete">
                     <i class="fa-solid fa-lock"></i>
                   </a>
                 <?php endif; ?>
@@ -203,7 +286,16 @@ if (isset($_POST['save_customer'])) {
       $sql = "SELECT * FROM khachhang";
       $result = mysqli_query($conn, $sql);
       while ($row = mysqli_fetch_array($result)) {
-          $modalId = "editModal-" . $row['MA_KH'];
+          $khachHang = new KhachHang(
+              $row['MA_KH'],
+              $row['TEN_KH'],
+              $row['MAT_KHAU'],
+              $row['DIA_CHI'],
+              $row['SO_DIEN_THOAI'],
+              $row['TRANG_THAI'],
+              $row['NGAY_TAO']
+          );
+          $modalId = "editModal-" . $khachHang->getId();
       ?>
       <div class="modal fade modal-form" id="<?php echo $modalId ?>" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -216,30 +308,30 @@ if (isset($_POST['save_customer'])) {
             </div>
             <div class="modal-body">
               <form action="admincustomer.php" method="post">
-                <input type="hidden" name="makh" value="<?php echo $row['MA_KH'] ?>">
+                <input type="hidden" name="makh" value="<?php echo $khachHang->getId() ?>">
                 <div class="row">
                   <div class="col-12">
                     <div class="form-group">
                       <label for="tenkh">Tên đầy đủ</label>
-                      <input type="text" id="tenkh" name="tenkh" class="form-control" value="<?php echo $row['TEN_KH'] ?>" />
+                      <input type="text" id="tenkh" name="tenkh" class="form-control" value="<?php echo $khachHang->getTen() ?>" />
                     </div>
                   </div>
                   <div class="col-12">
                     <div class="form-group">
                       <label for="sodienthoai">Số điện thoại</label>
-                      <input type="text" id="sodienthoai" name="sodienthoai" class="form-control" value="<?php echo $row['SO_DIEN_THOAI'] ?>" />
+                      <input type="text" id="sodienthoai" name="sodienthoai" class="form-control" value="<?php echo $khachHang->getSoDienThoai() ?>" />
                     </div>
                   </div>
                   <div class="col-12">
                     <div class="form-group">
                       <label for="diachi">Địa chỉ</label>
-                      <input type="text" id="diachi" name="diachi" class="form-control" value="<?php echo $row['DIA_CHI'] ?>" />
+                      <input type="text" id="diachi" name="diachi" class="form-control" value="<?php echo $khachHang->getDiaChi() ?>" />
                     </div>
                   </div>
                   <div class="col-12">
                     <div class="form-group">
                       <label for="matkhau">Mật khẩu</label>
-                      <input type="text" id="matkhau" name="matkhau" class="form-control" value="<?php echo $row['MAT_KHAU'] ?>" />
+                      <input type="text" id="matkhau" name="matkhau" class="form-control" value="<?php echo $khachHang->getMatKhau() ?>" />
                     </div>
                   </div>
                   <div class="col-12">
@@ -270,14 +362,23 @@ if (isset($_POST['save_customer'])) {
         $sql = "SELECT MA_KH, TEN_KH, SO_DIEN_THOAI, MAT_KHAU, DIA_CHI, TRANG_THAI, NGAY_TAO FROM khachhang";
         $result = mysqli_query($conn, $sql);
         while ($row = mysqli_fetch_array($result)) {
+            $khachHang = new KhachHang(
+                $row['MA_KH'],
+                $row['TEN_KH'],
+                $row['MAT_KHAU'],
+                $row['DIA_CHI'],
+                $row['SO_DIEN_THOAI'],
+                $row['TRANG_THAI'],
+                $row['NGAY_TAO']
+            );
             echo "{
-                makh: '" . $row['MA_KH'] . "',
-                tenkh: '" . addslashes($row['TEN_KH']) . "',
-                sodienthoai: '" . $row['SO_DIEN_THOAI'] . "',
-                matkhau: '" . $row['MAT_KHAU'] . "',
-                diachi: '" . addslashes($row['DIA_CHI']) . "',
-                trangthai: '" . $row['TRANG_THAI'] . "',
-                ngaytao: '" . $row['NGAY_TAO'] . "'
+                makh: '" . $khachHang->getId() . "',
+                tenkh: '" . addslashes($khachHang->getTen()) . "',
+                sodienthoai: '" . $khachHang->getSoDienThoai() . "',
+                matkhau: '" . $khachHang->getMatKhau() . "',
+                diachi: '" . addslashes($khachHang->getDiaChi()) . "',
+                trangthai: '" . $khachHang->getTrangThai() . "',
+                ngaytao: '" . $khachHang->getNgayTao() . "'
             },";
         }
         ?>
