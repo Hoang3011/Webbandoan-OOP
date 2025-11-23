@@ -1,3 +1,85 @@
+<?php
+include "connect.php";
+class Order
+{
+    private $conn;
+    private $customerId;
+
+    public function __construct($conn, $customerId)
+    {
+        $this->conn = $conn;
+        $this->customerId = $customerId;
+    }
+
+    public function getOrders()
+    {
+        $sql = "SELECT MA_DH, NGAY_TAO, DIA_CHI, TONG_TIEN, PHUONG_THUC, TINH_TRANG
+                FROM donhang
+                WHERE MA_KH = ?
+                ORDER BY NGAY_TAO DESC";
+        $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param("i", $this->customerId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $orders = [];
+        while ($row = $result->fetch_assoc()) {
+            $orders[] = $row;
+        }
+        $stmt->close();
+        return $orders;
+    }
+
+    public function renderOrders()
+    {
+        $orders = $this->getOrders();
+        if ($orders === false) {
+            echo '<tr><td colspan="6" class="text-danger">Lỗi hệ thống. Vui lòng thử lại sau.</td></tr>';
+            return;
+        }
+        if (count($orders) === 0) {
+            echo '<tr><td colspan="6" class="no-order">
+                    <i class="fas fa-box-open fa-2x mb-3"></i><br>
+                    Bạn chưa có đơn hàng nào.
+                  </td></tr>';
+            return;
+        }
+        foreach ($orders as $row) {
+            $ngay = $row['NGAY_TAO'] ? date("d-m-Y H:i", strtotime($row['NGAY_TAO'])) : 'Chưa xác định';
+            $tongtien = number_format($row['TONG_TIEN'], 0, ',', '.');
+            $trangthai = $row['TINH_TRANG'];
+            $class = '';
+            switch ($trangthai) {
+                case 'Chưa xác nhận':
+                    $class = 'status-chua';
+                    break;
+                case 'Đã xác nhận':
+                    $class = 'status-xacnhan';
+                    break;
+                case 'Đã giao thành công':
+                    $class = 'status-giao';
+                    break;
+                case 'Đã hủy đơn':
+                    $class = 'status-huy';
+                    break;
+            }
+            echo '<tr>
+                    <td><a class="font-weight-bold text-primary" href="chitiet.php?madh=' . $row['MA_DH'] . '">
+                        DH' . sprintf("%04d", $row['MA_DH']) . '
+                        <i class="fas fa-external-link-alt fa-xs"></i>
+                    </a></td>
+                    <td class="text-center">' . $ngay . '</td>
+                    <td>' . htmlspecialchars($row['DIA_CHI']) . '</td>
+                    <td class="font-weight-bold text-danger">' . $tongtien . '₫</td>
+                    <td>' . htmlspecialchars($row['PHUONG_THUC']) . '</td>
+                    <td class="' . $class . '">' . htmlspecialchars($trangthai) . '</td>
+                </tr>';
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="vi">
 
@@ -91,73 +173,14 @@
           </thead>
           <tbody>
             <?php
-            include "connect.php";
             if (!isset($_SESSION['makh'])) {
               echo '<tr><td colspan="6" class="no-order">
-                                <i class="fas fa-sign-in-alt fa-2x mb-3"></i><br>
-                                Bạn cần <a href="login.php">đăng nhập</a> để xem đơn hàng.
-                              </td></tr>';
+                      <i class="fas fa-sign-in-alt fa-2x mb-3"></i><br>
+                      Bạn cần <a href="login.php">đăng nhập</a> để xem đơn hàng.
+                    </td></tr>';
             } else {
-              $makh = $_SESSION['makh'];
-              $sql = "SELECT 
-                                    MA_DH,
-                                    NGAY_TAO,
-                                    DIA_CHI,
-                                    TONG_TIEN,
-                                    PHUONG_THUC,
-                                    TINH_TRANG
-                                FROM donhang 
-                                WHERE MA_KH = ? 
-                                ORDER BY NGAY_TAO DESC";
-
-              $stmt = $conn->prepare($sql);
-              if (!$stmt) {
-                echo '<tr><td colspan="6" class="text-danger">Lỗi hệ thống. Vui lòng thử lại sau.</td></tr>';
-              } else {
-                $stmt->bind_param("i", $makh);
-                $stmt->execute();
-                $result = $stmt->get_result();
-
-                if ($result->num_rows == 0) {
-                  echo '<tr><td colspan="6" class="no-order">
-                                        <i class="fas fa-box-open fa-2x mb-3"></i><br>
-                                        Bạn chưa có đơn hàng nào.
-                                      </td></tr>';
-                } else {
-                  while ($row = $result->fetch_assoc()) {
-                    $ngay = $row['NGAY_TAO'] ? date("d-m-Y H:i", strtotime($row['NGAY_TAO'])) : 'Chưa xác định';
-                    $tongtien = number_format($row['TONG_TIEN'], 0, ',', '.');
-                    $trangthai = $row['TINH_TRANG'];
-                    $class = '';
-                    switch ($trangthai) {
-                      case 'Chưa xác nhận':
-                        $class = 'status-chua';
-                        break;
-                      case 'Đã xác nhận':
-                        $class = 'status-xacnhan';
-                        break;
-                      case 'Đã giao thành công':
-                        $class = 'status-giao';
-                        break;
-                      case 'Đã hủy đơn':
-                        $class = 'status-huy';
-                        break;
-                    }
-                    echo '<tr>
-                                        <td><a class="font-weight-bold text-primary" href="chitiet.php?madh=' . $row['MA_DH'] . '">
-                                            DH' . sprintf("%04d", $row['MA_DH']) . '
-                                            <i class="fas fa-external-link-alt fa-xs"></i>
-                                        </a></td>
-                                        <td class="text-center">' . $ngay . '</td>
-                                        <td>' . htmlspecialchars($row['DIA_CHI']) . '</td>
-                                        <td class="font-weight-bold text-danger">' . $tongtien . '₫</td>
-                                        <td>' . htmlspecialchars($row['PHUONG_THUC']) . '</td>
-                                        <td class="' . $class . '">' . htmlspecialchars($trangthai) . '</td>
-                                    </tr>';
-                  }
-                }
-                $stmt->close();
-              }
+              $order = new Order($conn, $_SESSION['makh']);
+              $order->renderOrders();
             }
             ?>
           </tbody>

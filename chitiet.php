@@ -1,3 +1,82 @@
+<?php
+include "connect.php";
+
+class OrderProduct {
+    public $name;
+    public $image;
+    public $quantity;
+    public $price;
+    public $total;
+
+    public function __construct($row) {
+        $this->name = $row['Name'];
+        $this->image = $row['Image'];
+        $this->quantity = $row['SO_LUONG'];
+        $this->price = $row['GIA_LUC_MUA'];
+        $this->total = $row['THANH_TIEN'];
+    }
+}
+
+class Order {
+    public $data;
+    public $products = [];
+    public $totalPrice = 0;
+    public $totalQuantity = 0;
+
+    public function __construct($conn, $makh, $madh) {
+        $this->fetchOrder($conn, $makh, $madh);
+        if ($this->data) {
+            $this->fetchProducts($conn, $madh);
+        }
+    }
+
+    private function fetchOrder($conn, $makh, $madh) {
+        $sql = "SELECT dh.*, kh.TEN_KH, kh.SO_DIEN_THOAI 
+                FROM donhang dh 
+                JOIN khachhang kh ON dh.MA_KH = kh.MA_KH 
+                WHERE dh.MA_KH = ? AND dh.MA_DH = ?";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) die("Lỗi SQL: " . $conn->error);
+        $stmt->bind_param("ii", $makh, $madh);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $this->data = $result->fetch_assoc();
+        $stmt->close();
+    }
+
+    private function fetchProducts($conn, $madh) {
+        $sql_sp = "SELECT sp.TEN_SP AS Name, 
+                          sp.HINH_ANH AS Image, 
+                          ch.SO_LUONG, 
+                          ch.GIA_LUC_MUA, 
+                          (ch.SO_LUONG * ch.GIA_LUC_MUA) AS THANH_TIEN
+                   FROM chitietdonhang ch
+                   JOIN sanpham sp ON ch.MA_SP = sp.MA_SP
+                   WHERE ch.MA_DH = ?";
+        $stmt_sp = $conn->prepare($sql_sp);
+        $stmt_sp->bind_param("i", $madh);
+        $stmt_sp->execute();
+        $result_sp = $stmt_sp->get_result();
+
+        while ($row = $result_sp->fetch_assoc()) {
+            $product = new OrderProduct($row);
+            $this->products[] = $product;
+            $this->totalPrice += $product->total;
+            $this->totalQuantity += $product->quantity;
+        }
+        $stmt_sp->close();
+    }
+}
+
+// Khởi tạo biến mặc định
+$order = null;
+
+if (isset($_SESSION['makh']) && isset($_GET['madh']) && is_numeric($_GET['madh'])) {
+    $makh = $_SESSION['makh'];
+    $madh = (int) $_GET['madh'];
+    $order = new Order($conn, $makh, $madh);
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -25,65 +104,16 @@
   <div class="chitiet">
     <div class="container">
       <?php
-      include "connect.php";
-
-      // Khởi tạo biến mặc định
-      $donhang = null;
-      $sanphams = [];
-      $tienHang = 0;
-      $soLuongMon = 0;
-
-      if (isset($_SESSION['makh']) && isset($_GET['madh']) && is_numeric($_GET['madh'])) {
-        $makh = $_SESSION['makh'];
-        $madh = (int) $_GET['madh'];
-
-        // 1. LẤY THÔNG TIN ĐƠN HÀNG + KHÁCH HÀNG
-        $sql = "SELECT dh.*, kh.TEN_KH, kh.SO_DIEN_THOAI 
-                FROM donhang dh 
-                JOIN khachhang kh ON dh.MA_KH = kh.MA_KH 
-                WHERE dh.MA_KH = ? AND dh.MA_DH = ?";
-        $stmt = $conn->prepare($sql);
-        if (!$stmt)
-          die("Lỗi SQL: " . $conn->error);
-        $stmt->bind_param("ii", $makh, $madh);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $donhang = $result->fetch_assoc();
-        $stmt->close();
-
-        if ($donhang) {
-          // 2. LẤY SẢN PHẨM TỪ chitietdonhang
-          $sql_sp = "SELECT sp.TEN_SP AS Name, 
-                            sp.HINH_ANH AS Image, 
-                            ch.SO_LUONG, 
-                            ch.GIA_LUC_MUA, 
-                            (ch.SO_LUONG * ch.GIA_LUC_MUA) AS THANH_TIEN
-                     FROM chitietdonhang ch
-                     JOIN sanpham sp ON ch.MA_SP = sp.MA_SP
-                     WHERE ch.MA_DH = ?";
-          $stmt_sp = $conn->prepare($sql_sp);
-          $stmt_sp->bind_param("i", $madh);
-          $stmt_sp->execute();
-          $result_sp = $stmt_sp->get_result();
-
-          while ($row = $result_sp->fetch_assoc()) {
-            $sanphams[] = $row;
-            $tienHang += $row['THANH_TIEN'];
-            $soLuongMon += $row['SO_LUONG'];
-          }
-          $stmt_sp->close();
-        }
-      }
-
       // XỬ LÝ LỖI
       if (!isset($_SESSION['makh'])) {
         echo '<div class="alert alert-danger text-center">Vui lòng đăng nhập!</div>';
       } elseif (!isset($_GET['madh']) || !is_numeric($_GET['madh'])) {
         echo '<div class="alert alert-danger text-center">Đơn hàng không hợp lệ!</div>';
-      } elseif (!$donhang) {
+      } elseif (!$order || !$order->data) {
         echo '<div class="alert alert-danger text-center">Không tìm thấy đơn hàng!</div>';
       } else {
         // HIỂN THỊ NỘI DUNG
+        $donhang = $order->data;
         ?>
         <div class="inner-chitiet">
           <div class="inner-tt">Chi tiết đơn hàng DH<?= sprintf("%04d", $donhang['MA_DH']) ?></div>
@@ -128,26 +158,26 @@
 
         <!-- Sản phẩm -->
         <div class="inner-menu">
-          <?php foreach ($sanphams as $sp): ?>
+          <?php foreach ($order->products as $sp): ?>
             <div class="inner-item">
               <div class="inner-info">
                 <div class="inner-img">
-                  <img src="<?= htmlspecialchars($sp['Image']) ?>" width="80px" height="80px"
-                    alt="<?= htmlspecialchars($sp['Name']) ?>" />
+                  <img src="<?= htmlspecialchars($sp->image) ?>" width="80px" height="80px"
+                    alt="<?= htmlspecialchars($sp->name) ?>" />
                 </div>
                 <div class="inner-chu">
-                  <div class="inner-ten"><?= htmlspecialchars($sp['Name']) ?></div>
-                  <div class="inner-sl">x<?= $sp['SO_LUONG'] ?></div>
+                  <div class="inner-ten"><?= htmlspecialchars($sp->name) ?></div>
+                  <div class="inner-sl">x<?= $sp->quantity ?></div>
                 </div>
               </div>
-              <div class="inner-gia"><?= number_format($sp['THANH_TIEN'], 0, ',', '.') ?>₫</div>
+              <div class="inner-gia"><?= number_format($sp->total, 0, ',', '.') ?>₫</div>
             </div>
           <?php endforeach; ?>
 
           <div class="inner-tonggia">
             <div class="inner-tien">
-              <div class="inner-th">Tiền hàng <span><?= $soLuongMon ?> món</span></div>
-              <div class="inner-st"><?= number_format($tienHang, 0, ',', '.') ?>₫</div>
+              <div class="inner-th">Tiền hàng <span><?= $order->totalQuantity ?> món</span></div>
+              <div class="inner-st"><?= number_format($order->totalPrice, 0, ',', '.') ?>₫</div>
             </div>
             <div class="inner-vanchuyen">
               <span class="inner-vc1">Vận chuyển</span>
@@ -155,7 +185,7 @@
             </div>
             <div class="inner-total">
               <span class="inner-tong1">Tổng tiền:</span>
-              <span class="inner-tong2"><?= number_format($tienHang, 0, ',', '.') ?>₫</span>
+              <span class="inner-tong2"><?= number_format($order->totalPrice, 0, ',', '.') ?>₫</span>
             </div>
           </div>
         </div>

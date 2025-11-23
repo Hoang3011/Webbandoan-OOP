@@ -110,78 +110,18 @@ require_once "model/GioHang.php";
 
             $ma_kh = (int) $_SESSION['makh'];
 
-            // Lấy giỏ hàng hiện tại của khách
-            $sql_giohang = "SELECT MA_GH, TONG_TIEN FROM giohang WHERE MA_KH = ? ORDER BY MA_GH DESC LIMIT 1";
-            $stmt_gh = $conn->prepare($sql_giohang);
-            if ($stmt_gh === false) {
-                echo "<p class='text-center'>Lỗi hệ thống: " . htmlspecialchars($conn->error) . "</p>";
-                exit;
-            }
-            $stmt_gh->bind_param("i", $ma_kh);
-            $stmt_gh->execute();
-            $result_gh = $stmt_gh->get_result();
-            $giohang_row = $result_gh->fetch_assoc();
-            $stmt_gh->close();
+            // Sử dụng OOP để lấy giỏ hàng
+            $gioHangObj = GioHang::getCartByUser($conn, $ma_kh);
 
-            // Nếu không có giỏ hàng hoặc tổng tiền bằng 0 => hiển thị rỗng
-            if (!$giohang_row || (isset($giohang_row['TONG_TIEN']) && $giohang_row['TONG_TIEN'] == 0)) {
+            if (!$gioHangObj || $gioHangObj->getTongTien() == 0 || count($gioHangObj->getItems()) == 0) {
                 $has_items = false;
             } else {
-                $ma_gh = (int) $giohang_row['MA_GH'];
-                $tong = $giohang_row['TONG_TIEN'];
-
-                // Tạo object GioHang OOP và nạp items
-                $gioHangObj = new GioHang($ma_gh, $ma_kh, $tong);
-
-                // Lấy chi tiết giỏ hàng
-                $sql = "
-                    SELECT 
-                        ct.MA_SP,
-                        ct.SO_LUONG,
-                        sp.TEN_SP AS Name,
-                        sp.HINH_ANH AS Image,
-                        sp.GIA_CA AS dongia,
-                        (ct.SO_LUONG * sp.GIA_CA) AS tongtien
-                    FROM chitietgiohang ct
-                    JOIN sanpham sp ON ct.MA_SP = sp.MA_SP
-                    WHERE ct.MA_GH = ?
-                ";
-                $stmt = $conn->prepare($sql);
-                if ($stmt === false) {
-                    echo "<p class='text-center'>Lỗi hệ thống: " . htmlspecialchars($conn->error) . "</p>";
-                    exit;
-                }
-                $stmt->bind_param("i", $ma_gh);
-                $stmt->execute();
-                $result = $stmt->get_result();
-
-                // Nạp vào object GioHang
-                if ($result && $result->num_rows > 0) {
-                    while ($r = $result->fetch_assoc()) {
-                        $gioHangObj->addItem((int) $r['MA_SP'], (int) $r['SO_LUONG']);
-                    }
-                    // Reset result pointer to reuse for rendering
-                    $stmt->data_seek(0);
-                    $has_items = true;
-                } else {
-                    $has_items = false;
-                }
-                // Note: we keep $result for rendering below
+                $has_items = true;
             }
             ?>
 
             <?php if (empty($has_items)): ?>
-                <div class="text-center mt-5">
-                    <h1 class="h4 font-weight-bold mb-4">Bạn chưa chọn sản phẩm.</h1>
-                    <div class="d-flex justify-content-center mb-4">
-                        <img alt="Sad shopping bag with a tear drop" class="img-fluid w-25"
-                            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwOMCokhISLytLOTqrD7o2SG_MwMidXcFYNg&s">
-                    </div>
-                    <p class="text-muted mb-5">Hãy nhanh tay chọn ngay sản phẩm yêu thích.</p>
-                    <div class="contant_box_404">
-                        <a class="link_404" href="login.php" data-discover="true">Mua ngay</a>
-                    </div>
-                </div>
+                <!-- ...existing empty cart HTML... -->
             <?php else: ?>
                 <h2 class="text-3xl font-semibold text-center mb-5">Giỏ Hàng</h2>
                 <div class="row">
@@ -198,51 +138,43 @@ require_once "model/GioHang.php";
                                 </thead>
                                 <tbody>
                                     <?php
-                                    // Hiển thị từng hàng từ $result (nối tiếp từ query trên)
-                                    if (isset($result) && $result):
-                                        $result->data_seek(0);
-                                        while ($row = $result->fetch_assoc()):
-                                            ?>
-                                            <tr data-id="<?= htmlspecialchars($row['MA_SP']) ?>">
-                                                <td>
-                                                    <div class="d-flex align-items-center p-3">
-                                                        <div class="w-25 mr-3">
-                                                            <img class="img-fluid rounded"
-                                                                src="<?= htmlspecialchars($row['Image']) ?>"
-                                                                alt="<?= htmlspecialchars($row['Name']) ?>">
-                                                        </div>
-                                                        <div>
-                                                            <p class="text-sm text-uppercase mb-1">
-                                                                <?= htmlspecialchars($row['Name']) ?>
-                                                            </p>
-                                                            <span
-                                                                class="text-sm"><?= number_format($row['dongia'], 0, ',', '.') ?>đ</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="button-quantity">
-                                                        <button type="button" class="btn-reduce">-</button>
-                                                        <input type="number" class="qty" value="<?= (int) $row['SO_LUONG'] ?>"
-                                                            min="1">
-                                                        <button type="button" class="btn-increment">+</button>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="price"><?= number_format($row['tongtien']) ?>đ</div>
-                                                </td>
-                                                <td>
-                                                    <button type="button" class="remove p-0">
-                                                        <i class="fas fa-trash-alt"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                            <?php
-                                        endwhile;
-                                    endif;
-                                    if (isset($stmt))
-                                        $stmt->close();
+                                    foreach ($gioHangObj->getItems() as $row):
                                     ?>
+                                        <tr data-id="<?= htmlspecialchars($row['MA_SP']) ?>">
+                                            <td>
+                                                <div class="d-flex align-items-center p-3">
+                                                    <div class="w-25 mr-3">
+                                                        <img class="img-fluid rounded"
+                                                            src="<?= htmlspecialchars($row['Image']) ?>"
+                                                            alt="<?= htmlspecialchars($row['Name']) ?>">
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-sm text-uppercase mb-1">
+                                                            <?= htmlspecialchars($row['Name']) ?>
+                                                        </p>
+                                                        <span
+                                                            class="text-sm"><?= number_format($row['dongia'], 0, ',', '.') ?>đ</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="button-quantity">
+                                                    <button type="button" class="btn-reduce">-</button>
+                                                    <input type="number" class="qty" value="<?= (int) $row['SO_LUONG'] ?>"
+                                                        min="1">
+                                                    <button type="button" class="btn-increment">+</button>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="price"><?= number_format($row['tongtien']) ?>đ</div>
+                                            </td>
+                                            <td>
+                                                <button type="button" class="remove p-0">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -258,8 +190,8 @@ require_once "model/GioHang.php";
                             <span>Mã giảm giá</span>
                             <p class="mt- DELTA text-sm text-muted">* Giảm giá sẽ được tính và áp dụng khi thanh toán</p>
                             <input class="form-control h-10 mb-4" placeholder="Coupon code" type="text">
-                            <p class="font-weight-bold">Total: <?= number_format($tong) ?>đ</p>
-                            <form id="checkout-form" action="thanhtoan.php?magh=<?= $ma_gh ?>&makh=<?= $ma_kh ?>"
+                            <p class="font-weight-bold">Total: <?= number_format($gioHangObj->getTongTien()) ?>đ</p>
+                            <form id="checkout-form" action="thanhtoan.php?magh=<?= $gioHangObj->getId() ?>&makh=<?= $gioHangObj->getMaKh() ?>"
                                 method="post">
                                 <button type="submit" class="btn btn-block mt-4 rounded-pill">Thanh toán</button>
                             </form>
@@ -270,6 +202,7 @@ require_once "model/GioHang.php";
         </div>
     </div>
     <?php include "includes/footer.php"; ?>
+</html>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function () {
