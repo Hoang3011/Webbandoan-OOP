@@ -5,7 +5,7 @@ include "connect.php";
 $limit = 12;
 
 // Trang hiện tại (mặc định là 1)
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $page = max($page, 1);
 
 // Tính OFFSET
@@ -14,8 +14,8 @@ $offset = ($page - 1) * $limit;
 // Lấy tham số tìm kiếm
 $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
-$min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int)$_GET['min_price'] : '';
-$max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)$_GET['max_price'] : '';
+$min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int) $_GET['min_price'] : '';
+$max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int) $_GET['max_price'] : '';
 $sort = isset($_GET['sort']) ? $_GET['sort'] : '';
 $Type = isset($_GET['Type']) ? trim($_GET['Type']) : '';
 
@@ -45,12 +45,12 @@ if (!empty($category)) {
 // Thêm điều kiện tìm kiếm theo giá
 if ($min_price !== '' && is_numeric($min_price)) {
     $sql .= " AND GIA_CA >= ?";
-    $params[] = (int)$min_price;
+    $params[] = (int) $min_price;
     $types .= "i";
 }
 if ($max_price !== '' && is_numeric($max_price)) {
     $sql .= " AND GIA_CA <= ?";
-    $params[] = (int)$max_price;
+    $params[] = (int) $max_price;
     $types .= "i";
 }
 
@@ -99,12 +99,12 @@ if (!empty($category)) {
 }
 if ($min_price !== '' && is_numeric($min_price)) {
     $total_sql .= " AND GIA_CA >= ?";
-    $total_params[] = (int)$min_price;
+    $total_params[] = (int) $min_price;
     $total_types .= "i";
 }
 if ($max_price !== '' && is_numeric($max_price)) {
     $total_sql .= " AND GIA_CA <= ?";
-    $total_params[] = (int)$max_price;
+    $total_params[] = (int) $max_price;
     $total_types .= "i";
 }
 
@@ -127,16 +127,19 @@ $is_search = !empty($keyword) || !empty($category) || !empty($Type) || $min_pric
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous" />
     <link rel="stylesheet" href="assets/font-awesome-pro-v6-6.2.0/css/all.min.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/style.css" />
     <title>Đặc sản 3 miền</title>
     <link href="./assets/img/logo.png" rel="icon" type="image/x-icon" />
 </head>
+
 <body>
     <!-- Header -->
     <?php include "includes/header.php"; ?>
@@ -215,16 +218,29 @@ $is_search = !empty($keyword) || !empty($category) || !empty($Type) || $min_pric
                             <?php echo $is_search ? 'Kết quả tìm kiếm' : 'Khám phá thực đơn của chúng tôi'; ?>
                         </div>
                     </div>
-                    <?php while ($row = $result->fetch_assoc()): ?>
+                    <?php while ($row = $result->fetch_assoc()):
+                        // Tạo object MonAn theo OOP model
+                        require_once "model/MonAn.php";
+                        $monAn = new MonAn(
+                            $row['MA_SP'],
+                            $row['TEN_SP'],
+                            $row['HINH_ANH'],
+                            $row['GIA_CA'],
+                            $row['MO_TA'] ?? '',
+                            $row['MA_LOAISP'],
+                            $row['TINH_TRANG'] ?? 1
+                        );
+                        ?>
                         <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6 col-12">
                             <div class="inner-item">
-                                <a href="chitietsp.php?id=<?= $row['MA_SP']; ?>" class="inner-img">
-                                    <img src="<?= htmlspecialchars($row['HINH_ANH']); ?>" />
+                                <a href="chitietsp.php?id=<?= htmlspecialchars($monAn->getId()); ?>" class="inner-img">
+                                    <img src="<?= htmlspecialchars($monAn->getHinhAnh()); ?>"
+                                        alt="<?= htmlspecialchars($monAn->getTen()); ?>" />
                                 </a>
                                 <div class="inner-info">
-                                    <div class="inner-ten"><?= htmlspecialchars($row['TEN_SP']); ?></div>
-                                    <div class="inner-gia"><?= number_format($row['GIA_CA'], 0, '.', '.'); ?>₫</div>
-                                    <a href="chitietsp.php?id=<?= $row['MA_SP']; ?>" class="inner-muahang">
+                                    <div class="inner-ten"><?= htmlspecialchars($monAn->getTen()); ?></div>
+                                    <div class="inner-gia"><?= number_format($monAn->getGiaCa(), 0, ',', '.'); ?>₫</div>
+                                    <a href="chitietsp.php?id=<?= htmlspecialchars($monAn->getId()); ?>" class="inner-muahang">
                                         <i class="fa-solid fa-cart-plus"></i> ĐẶT MÓN
                                     </a>
                                 </div>
@@ -236,7 +252,8 @@ $is_search = !empty($keyword) || !empty($category) || !empty($Type) || $min_pric
                         <div class="home-products" id="home-products">
                             <div class="no-result">
                                 <div class="no-result-h">Tìm kiếm không có kết quả</div>
-                                <div class="no-result-p">Xin lỗi, chúng tôi không thể tìm được kết quả hợp với tìm kiếm của bạn</div>
+                                <div class="no-result-p">Xin lỗi, chúng tôi không thể tìm được kết quả hợp với tìm kiếm của
+                                    bạn</div>
                                 <div class="no-result-i"><i class="fa-light fa-face-sad-cry"></i></div>
                             </div>
                         </div>
@@ -286,7 +303,7 @@ $is_search = !empty($keyword) || !empty($category) || !empty($Type) || $min_pric
 
     <?php if ($is_search && $total_products > 0): ?>
         <script>
-            document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('home-service').scrollIntoView({ behavior: 'smooth' });
             });
         </script>
@@ -302,4 +319,5 @@ $is_search = !empty($keyword) || !empty($category) || !empty($Type) || $min_pric
         }
     </script>
 </body>
+
 </html>

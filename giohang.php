@@ -1,3 +1,7 @@
+<?php
+include "connect.php";
+require_once "model/GioHang.php";
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -92,32 +96,42 @@
 </head>
 
 <body>
-    <?php include "includes/headerlogin.php" ?>
+    <?php include "includes/headerlogin.php"; ?>
     <div class="giohang">
         <div class="container">
             <?php
-            include 'connect.php';
-
             // Kiểm tra đăng nhập
+            if (session_status() === PHP_SESSION_NONE)
+                session_start();
             if (!isset($_SESSION['makh'])) {
                 header("Location: login.php");
                 exit;
             }
 
-            $ma_kh = $_SESSION['makh'];
+            $ma_kh = (int) $_SESSION['makh'];
 
             // Lấy giỏ hàng hiện tại của khách
             $sql_giohang = "SELECT MA_GH, TONG_TIEN FROM giohang WHERE MA_KH = ? ORDER BY MA_GH DESC LIMIT 1";
             $stmt_gh = $conn->prepare($sql_giohang);
+            if ($stmt_gh === false) {
+                echo "<p class='text-center'>Lỗi hệ thống: " . htmlspecialchars($conn->error) . "</p>";
+                exit;
+            }
             $stmt_gh->bind_param("i", $ma_kh);
             $stmt_gh->execute();
             $result_gh = $stmt_gh->get_result();
-            $giohang = $result_gh->fetch_assoc();
+            $giohang_row = $result_gh->fetch_assoc();
+            $stmt_gh->close();
 
-            if (!$giohang || $giohang['TONG_TIEN'] == 0) {
+            // Nếu không có giỏ hàng hoặc tổng tiền bằng 0 => hiển thị rỗng
+            if (!$giohang_row || (isset($giohang_row['TONG_TIEN']) && $giohang_row['TONG_TIEN'] == 0)) {
                 $has_items = false;
             } else {
-                $ma_gh = $giohang['MA_GH'];
+                $ma_gh = (int) $giohang_row['MA_GH'];
+                $tong = $giohang_row['TONG_TIEN'];
+
+                // Tạo object GioHang OOP và nạp items
+                $gioHangObj = new GioHang($ma_gh, $ma_kh, $tong);
 
                 // Lấy chi tiết giỏ hàng
                 $sql = "
@@ -133,15 +147,30 @@
                     WHERE ct.MA_GH = ?
                 ";
                 $stmt = $conn->prepare($sql);
+                if ($stmt === false) {
+                    echo "<p class='text-center'>Lỗi hệ thống: " . htmlspecialchars($conn->error) . "</p>";
+                    exit;
+                }
                 $stmt->bind_param("i", $ma_gh);
                 $stmt->execute();
                 $result = $stmt->get_result();
-                $has_items = $result->num_rows > 0;
-                $tong = $giohang['TONG_TIEN'];
-            }
 
-            if (!$has_items):
-                ?>
+                // Nạp vào object GioHang
+                if ($result && $result->num_rows > 0) {
+                    while ($r = $result->fetch_assoc()) {
+                        $gioHangObj->addItem((int) $r['MA_SP'], (int) $r['SO_LUONG']);
+                    }
+                    // Reset result pointer to reuse for rendering
+                    $stmt->data_seek(0);
+                    $has_items = true;
+                } else {
+                    $has_items = false;
+                }
+                // Note: we keep $result for rendering below
+            }
+            ?>
+
+            <?php if (empty($has_items)): ?>
                 <div class="text-center mt-5">
                     <h1 class="h4 font-weight-bold mb-4">Bạn chưa chọn sản phẩm.</h1>
                     <div class="d-flex justify-content-center mb-4">
@@ -168,40 +197,52 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php while ($row = $result->fetch_assoc()): ?>
-                                        <tr data-id="<?= $row['MA_SP'] ?>">
-                                            <td>
-                                                <div class="d-flex align-items-center p-3">
-                                                    <div class="w-25 mr-3">
-                                                        <img class="img-fluid rounded"
-                                                            src="<?= htmlspecialchars($row['Image']) ?>"
-                                                            alt="<?= htmlspecialchars($row['Name']) ?>">
+                                    <?php
+                                    // Hiển thị từng hàng từ $result (nối tiếp từ query trên)
+                                    if (isset($result) && $result):
+                                        $result->data_seek(0);
+                                        while ($row = $result->fetch_assoc()):
+                                            ?>
+                                            <tr data-id="<?= htmlspecialchars($row['MA_SP']) ?>">
+                                                <td>
+                                                    <div class="d-flex align-items-center p-3">
+                                                        <div class="w-25 mr-3">
+                                                            <img class="img-fluid rounded"
+                                                                src="<?= htmlspecialchars($row['Image']) ?>"
+                                                                alt="<?= htmlspecialchars($row['Name']) ?>">
+                                                        </div>
+                                                        <div>
+                                                            <p class="text-sm text-uppercase mb-1">
+                                                                <?= htmlspecialchars($row['Name']) ?>
+                                                            </p>
+                                                            <span
+                                                                class="text-sm"><?= number_format($row['dongia'], 0, ',', '.') ?>đ</span>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p class="text-sm text-uppercase mb-1">
-                                                            <?= htmlspecialchars($row['Name']) ?></p>
-                                                        <span
-                                                            class="text-sm"><?= number_format($row['dongia'], 0, ',', '.') ?>đ</span>
+                                                </td>
+                                                <td>
+                                                    <div class="button-quantity">
+                                                        <button type="button" class="btn-reduce">-</button>
+                                                        <input type="number" class="qty" value="<?= (int) $row['SO_LUONG'] ?>"
+                                                            min="1">
+                                                        <button type="button" class="btn-increment">+</button>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div class="button-quantity">
-                                                    <button type="button" class="btn-reduce">-</button>
-                                                    <input type="number" class="qty" value="<?= $row['SO_LUONG'] ?>" min="1">
-                                                    <button type="button" class="btn-increment">+</button>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div class="price"><?= number_format($row['tongtien']) ?>đ</div>
-                                            </td>
-                                            <td>
-                                                <button type="button" class="remove p-0">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    <?php endwhile; ?>
+                                                </td>
+                                                <td>
+                                                    <div class="price"><?= number_format($row['tongtien']) ?>đ</div>
+                                                </td>
+                                                <td>
+                                                    <button type="button" class="remove p-0">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <?php
+                                        endwhile;
+                                    endif;
+                                    if (isset($stmt))
+                                        $stmt->close();
+                                    ?>
                                 </tbody>
                             </table>
                         </div>
@@ -210,8 +251,7 @@
                         <div class="card bg-cream p-4 mb-4">
                             <h5 class="text-uppercase font-weight-medium text-sm">MIỄN PHÍ VẬN CHUYỂN MỪNG LỄ 30/4 – CHO TẤT
                                 CẢ ĐƠN HÀNG </h5>
-                            <p class="text-sm mt-2">Chúc mừng! Bạn được miễn phí vận chuyển nhân dịp lễ 30/4!
-                            </p>
+                            <p class="text-sm mt-2">Chúc mừng! Bạn được miễn phí vận chuyển nhân dịp lễ 30/4!</p>
                             <div class="bg-success w-100 mt-3"></div>
                         </div>
                         <div class="card bg-light-gray p-4">
@@ -294,7 +334,6 @@
             });
         });
     </script>
-
 </body>
 
 </html>

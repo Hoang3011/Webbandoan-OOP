@@ -13,7 +13,7 @@ if ($conn->connect_error) {
 
 $search = isset($_POST["search"]) ? trim($_POST["search"]) : '';
 $category = isset($_POST["category"]) ? trim($_POST["category"]) : '';
-$page = isset($_POST["page"]) ? (int)$_POST["page"] : 1;
+$page = isset($_POST["page"]) ? (int) $_POST["page"] : 1;
 $limit = 12;
 $offset = ($page - 1) * $limit;
 
@@ -49,7 +49,8 @@ if (!empty($conditions)) {
 // Đếm tổng số sản phẩm
 $total_sql = str_replace("SELECT sanpham.*, loaisp.TEN_LOAISP", "SELECT COUNT(*) AS total", $sql);
 $total_stmt = $conn->prepare($total_sql);
-if (!empty($params)) $total_stmt->bind_param($types, ...$params);
+if (!empty($params))
+    $total_stmt->bind_param($types, ...$params);
 $total_stmt->execute();
 $total_products = $total_stmt->get_result()->fetch_assoc()["total"];
 $total_pages = ceil($total_products / $limit);
@@ -66,7 +67,8 @@ $stmt = $conn->prepare($sql);
 if (!$stmt) {
     die(json_encode(["error" => "Lỗi truy vấn: " . $conn->error]));
 }
-if (!empty($params)) $stmt->bind_param($types, ...$params);
+if (!empty($params))
+    $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -86,9 +88,9 @@ while ($row = $result->fetch_assoc()) {
         "TEN_SP" => $monAn->getTen(),
         "MO_TA" => $monAn->getMoTa(),
         "LOAI" => $row["TEN_LOAISP"], // ✅ giờ có dữ liệu đúng
-        "HINH_ANH" => "http://localhost/Webbandoan3/" . str_replace("\\", "/", $monAn->getHinhAnh()),
-        "TINH_TRANG" => (int)$monAn->getTinhTrang(),
-        "GIA_BAN" => (int)$monAn->getGiaCa(),
+        "HINH_ANH" => "http://localhost/Webbandoan3/webbandoan3/" . str_replace("\\", "/", $monAn->getHinhAnh()),
+        "TINH_TRANG" => (int) $monAn->getTinhTrang(),
+        "GIA_BAN" => (int) $monAn->getGiaCa(),
     ];
 }
 

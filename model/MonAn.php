@@ -1,6 +1,7 @@
 <?php
 
-class MonAn {
+class MonAn
+{
     private $id;         // MA_SP
     private $ten;        // TEN_SP
     private $hinhAnh;    // HINH_ANH
@@ -9,7 +10,8 @@ class MonAn {
     private $maLoaiSp;   // MA_LOAISP
     private $tinhTrang; // TINH_TRANG (1: active, 0: hidden, -1: deleted)
 
-    public function __construct($id, $ten, $hinhAnh, $giaCa, $moTa, $maLoaiSp, $tinhTrang = 1) {
+    public function __construct($id, $ten, $hinhAnh, $giaCa, $moTa, $maLoaiSp, $tinhTrang = 1)
+    {
         $this->id = $id;
         $this->ten = $ten;
         $this->hinhAnh = $hinhAnh;
@@ -20,59 +22,72 @@ class MonAn {
     }
 
     // Getters
-    public function getId() {
+    public function getId(): mixed
+    {
         return $this->id;
     }
 
-    public function getTen() {
+    public function getTen(): mixed
+    {
         return $this->ten;
     }
 
-    public function getHinhAnh() {
+    public function getHinhAnh(): mixed
+    {
         return $this->hinhAnh;
     }
 
-    public function getGiaCa() {
+    public function getGiaCa(): mixed
+    {
         return $this->giaCa;
     }
 
-    public function getMoTa() {
+    public function getMoTa(): mixed
+    {
         return $this->moTa;
     }
 
-    public function getMaLoaiSp() {
+    public function getMaLoaiSp(): mixed
+    {
         return $this->maLoaiSp;
     }
 
-    public function getTinhTrang() {
+    public function getTinhTrang(): mixed
+    {
         return $this->tinhTrang;
     }
 
     // Setters
-    public function setTen($ten) {
+    public function setTen($ten): void
+    {
         $this->ten = $ten;
     }
 
-    public function setHinhAnh($hinhAnh) {
+    public function setHinhAnh($hinhAnh): void
+    {
         $this->hinhAnh = $hinhAnh;
     }
 
-    public function setGiaCa($giaCa) {
+    public function setGiaCa($giaCa): void
+    {
         if ($giaCa < 0) {
             throw new Exception("Giá không hợp lệ");
         }
         $this->giaCa = $giaCa;
     }
 
-    public function setMoTa($moTa) {
+    public function setMoTa($moTa): void
+    {
         $this->moTa = $moTa;
     }
 
-    public function setMaLoaiSp($maLoaiSp) {
+    public function setMaLoaiSp($maLoaiSp): void
+    {
         $this->maLoaiSp = $maLoaiSp;
     }
 
-    public function setTinhTrang($tinhTrang) {
+    public function setTinhTrang($tinhTrang): void
+    {
         $this->tinhTrang = $tinhTrang;
     }
 }

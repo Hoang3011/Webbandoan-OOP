@@ -14,10 +14,13 @@
 </head>
 
 <body>
-  <?php include_once "includes/headerlogin.php"; ?>
-
   <?php
+  include_once "includes/headerlogin.php";
   include "connect.php";
+  require_once "model/MonAn.php";
+
+  if (session_status() === PHP_SESSION_NONE)
+    session_start();
 
   // Kiểm tra đăng nhập
   if (!isset($_SESSION['makh'])) {
@@ -32,15 +35,36 @@
   $sql_sp = "SELECT MA_SP, TEN_SP, HINH_ANH, GIA_CA, MO_TA, TINH_TRANG 
            FROM sanpham WHERE MA_SP = ? AND TINH_TRANG = 1";
   $stmt_sp = $conn->prepare($sql_sp);
+  if ($stmt_sp === false) {
+    echo "<h2 class='text-center mt-5'>Lỗi hệ thống: " . htmlspecialchars($conn->error) . "</h2>";
+    exit;
+  }
   $stmt_sp->bind_param("i", $masp);
-  $stmt_sp->execute();
+  if (!$stmt_sp->execute()) {
+    echo "<h2 class='text-center mt-5'>Lỗi khi truy vấn sản phẩm.</h2>";
+    $stmt_sp->close();
+    exit;
+  }
   $result_sp = $stmt_sp->get_result();
 
   if ($result_sp->num_rows == 0) {
     echo "<h2 class='text-center mt-5'>Không tìm thấy sản phẩm!</h2>";
+    $stmt_sp->close();
     exit;
   }
   $sp = $result_sp->fetch_assoc();
+  $stmt_sp->close();
+
+  // Tạo object MonAn từ dữ liệu
+  $monAn = new MonAn(
+    $sp['MA_SP'],
+    $sp['TEN_SP'],
+    $sp['HINH_ANH'],
+    $sp['GIA_CA'],
+    $sp['MO_TA'],
+    null,
+    $sp['TINH_TRANG']
+  );
   ?>
 
   <div class="chitietSP">
@@ -51,19 +75,23 @@
             <div class="col-xl-5 col-lg-5">
               <div class="inner-image">
                 <div class="inner-img">
-                  <img src="<?= htmlspecialchars($sp['HINH_ANH']) ?>" alt="<?= htmlspecialchars($sp['TEN_SP']) ?>" />
+                  <img src="<?= htmlspecialchars($monAn->getHinhAnh()) ?>"
+                    alt="<?= htmlspecialchars($monAn->getTen()) ?>" />
                 </div>
               </div>
             </div>
             <div class="col-xl-7 col-lg-7">
               <div class="inner-content">
-                <div class="inner-ten"><?= htmlspecialchars($sp['TEN_SP']) ?></div>
+                <div class="inner-ten"><?= htmlspecialchars($monAn->getTen()) ?></div>
                 <div class="inner-tt">
-                  Trạng thái: <span class="inner-conhang"><i class="fa-solid fa-check"></i>Còn món</span>
+                  Trạng thái:
+                  <span class="inner-conhang">
+                    <i class="fa-solid fa-check"></i><?= $monAn->getTinhTrang() == 1 ? ' Còn món' : ' Tạm ngừng' ?>
+                  </span>
                 </div>
                 <form method="post" action="">
-                  <div class="inner-gia"><?= number_format($sp['GIA_CA'], 0, ',', '.') ?> ₫</div>
-                  <div class="inner-desc"><?= nl2br(htmlspecialchars($sp['MO_TA'])) ?></div>
+                  <div class="inner-gia"><?= number_format($monAn->getGiaCa(), 0, ',', '.') ?> ₫</div>
+                  <div class="inner-desc"><?= nl2br(htmlspecialchars($monAn->getMoTa())) ?></div>
                   <div class="inner-add">
                     <div class="inner-sl">Số lượng:</div>
                     <div class="inner-tanggiam">
@@ -72,21 +100,21 @@
                       <span onclick="tangsoluong()" class="inner-cong">+</span>
                     </div>
                     <button type="submit" onclick="thongbao()" class="inner-nut" name="addProduct">
-                    Thêm vào giỏ hàng 
-                  </button>
+                      Thêm vào giỏ hàng
+                    </button>
                   </div>
                 </form>
               </div>
             </div>
           </div>
-              <div class="col-xl-12">
-                <div class="inner-thongtin">
-                  <div class="inner-nut"><button class="inner-mt inner-mt-active">Mô tả</button></div>
-                  <div class="inner-mota">
-                    <div class="inner-nd"><?= nl2br(htmlspecialchars($sp['MO_TA'])) ?></div>
-                  </div>
-                </div>
+          <div class="col-xl-12">
+            <div class="inner-thongtin">
+              <div class="inner-nut"><button class="inner-mt inner-mt-active">Mô tả</button></div>
+              <div class="inner-mota">
+                <div class="inner-nd"><?= nl2br(htmlspecialchars($monAn->getMoTa())) ?></div>
               </div>
+            </div>
+          </div>
         </div>
 
         <!-- PHẦN DỊCH VỤ -->
@@ -119,14 +147,17 @@
             <div class="inner-noibat">
               <div class="inner-nb">SẢN PHẨM NỔI BẬT</div>
               <div class="inner-sp">
-                <?php while ($item = $result_noibat->fetch_assoc()): ?>
+                <?php while ($item = $result_noibat->fetch_assoc()):
+                  $itemObj = new MonAn($item['MA_SP'], $item['TEN_SP'], $item['HINH_ANH'], $item['GIA_CA'], '', null, 1);
+                  ?>
                   <div class="inner-item">
-                    <a href="chitietsp-login.php?id=<?= $item['MA_SP'] ?>" class="inner-anh">
-                      <img src="<?= htmlspecialchars($item['HINH_ANH']) ?>" alt="<?= htmlspecialchars($item['TEN_SP']) ?>">
+                    <a href="chitietsp-login.php?id=<?= htmlspecialchars($itemObj->getId()) ?>" class="inner-anh">
+                      <img src="<?= htmlspecialchars($itemObj->getHinhAnh()) ?>"
+                        alt="<?= htmlspecialchars($itemObj->getTen()) ?>">
                     </a>
                     <div class="inner-mota">
-                      <div class="inner-ten"><?= htmlspecialchars($item['TEN_SP']) ?></div>
-                      <div class="inner-gia"><?= number_format($item['GIA_CA'], 0, ',', '.') ?> ₫</div>
+                      <div class="inner-ten"><?= htmlspecialchars($itemObj->getTen()) ?></div>
+                      <div class="inner-gia"><?= number_format($itemObj->getGiaCa(), 0, ',', '.') ?> ₫</div>
                     </div>
                   </div>
                 <?php endwhile; ?>
@@ -151,32 +182,38 @@
         <?php
         $sql_lienquan = "SELECT MA_SP, TEN_SP, HINH_ANH, GIA_CA FROM sanpham WHERE TINH_TRANG = 1 AND MA_SP != ? ORDER BY RAND() LIMIT 4";
         $stmt_lq = $conn->prepare($sql_lienquan);
-        $stmt_lq->bind_param("i", $masp);
-        $stmt_lq->execute();
-        $result_lq = $stmt_lq->get_result();
+        if ($stmt_lq === false) {
+          echo "<p class='col-12 text-center'>Lỗi hệ thống.</p>";
+        } else {
+          $stmt_lq->bind_param("i", $masp);
+          $stmt_lq->execute();
+          $result_lq = $stmt_lq->get_result();
 
-        if ($result_lq->num_rows > 0):
-          while ($row = $result_lq->fetch_assoc()):
-            ?>
-            <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6 col-12">
-              <div class="inner-item">
-                <a href="chitietsp-login.php?id=<?= $row['MA_SP'] ?>" class="inner-img">
-                  <img src="<?= htmlspecialchars($row['HINH_ANH']) ?>" />
-                </a>
-                <div class="inner-info">
-                  <div class="inner-ten"><?= htmlspecialchars($row['TEN_SP']) ?></div>
-                  <div class="inner-gia"><?= number_format($row['GIA_CA'], 0, ',', '.') ?> ₫</div>
-                  <a href="chitietsp-login.php?id=<?= $row['MA_SP'] ?>" class="inner-muahang">
-                    <i class="fa-solid fa-cart-plus"></i> ĐẶT MÓN
+          if ($result_lq->num_rows > 0):
+            while ($row = $result_lq->fetch_assoc()):
+              $rel = new MonAn($row['MA_SP'], $row['TEN_SP'], $row['HINH_ANH'], $row['GIA_CA'], '', null, 1);
+              ?>
+              <div class="col-xl-3 col-lg-3 col-md-4 col-sm-6 col-12">
+                <div class="inner-item">
+                  <a href="chitietsp-login.php?id=<?= htmlspecialchars($rel->getId()) ?>" class="inner-img">
+                    <img src="<?= htmlspecialchars($rel->getHinhAnh()) ?>" />
                   </a>
+                  <div class="inner-info">
+                    <div class="inner-ten"><?= htmlspecialchars($rel->getTen()) ?></div>
+                    <div class="inner-gia"><?= number_format($rel->getGiaCa(), 0, ',', '.') ?> ₫</div>
+                    <a href="chitietsp-login.php?id=<?= htmlspecialchars($rel->getId()) ?>" class="inner-muahang">
+                      <i class="fa-solid fa-cart-plus"></i> ĐẶT MÓN
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-            <?php
-          endwhile;
-        else:
-          echo "<p class='col-12 text-center'>Không có sản phẩm liên quan!</p>";
-        endif;
+              <?php
+            endwhile;
+          else:
+            echo "<p class='col-12 text-center'>Không có sản phẩm liên quan!</p>";
+          endif;
+          $stmt_lq->close();
+        }
         ?>
       </div>
     </div>
@@ -256,6 +293,9 @@
     function giamsoluong() {
       let input = document.getElementById("tanggiam");
       if (parseInt(input.value) > 1) input.value = parseInt(input.value) - 1;
+    }
+    function thongbao() {
+      // placeholder nếu cần
     }
   </script>
 </body>
